@@ -1,3 +1,16 @@
+
+x-backend: &backend
+  build: ./backend
+  image: cinema-backend:dev
+  user: "${UID:-1000}:${GID:-1000}"   # giữ như anh đang dùng ở Bước 1
+  volumes:
+    - ./backend:/app
+  env_file: .env
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_started
 services:
   db:
     image: postgres:16
@@ -13,19 +26,24 @@ services:
   redis:
     image: redis:7
 
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "8025:8025"
+
   backend:
-    build: ./backend
+    <<: *backend
     command: python manage.py runserver 0.0.0.0:8000
-    volumes:
-      - ./backend:/app
-    env_file: .env
     ports:
       - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_started
+  
+  worker:
+    <<: *backend
+    command: celery -A config worker -l info --concurrency=2
+
+  beat:
+    <<: *backend
+    command: celery -A config beat -l info --schedule /tmp/celerybeat-schedule
 
 volumes:
   pgdata:

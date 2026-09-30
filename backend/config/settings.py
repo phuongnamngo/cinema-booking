@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import environ
 from pathlib import Path
 from datetime import timedelta
+from celery.schedules import crontab
 
 env = environ.Env(DJANGO_DEBUG=(bool, False))
 
@@ -186,3 +187,32 @@ CHANNEL_LAYERS = {
         "CONFIG": {"hosts": [REDIS_URL]},
     }
 }
+
+# --- Celery ---
+CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://redis:6379/1")
+CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
+CELERY_TIMEZONE = TIME_ZONE                 # crontab hiểu theo giờ Việt Nam
+CELERY_TASK_IGNORE_RESULT = True            # không cần result backend
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_REJECT_ON_WORKER_LOST = True
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_TASK_SOFT_TIME_LIMIT = 45
+CELERY_TASK_TIME_LIMIT = 60
+
+CELERY_BEAT_SCHEDULE = {
+    "expire-pending-bookings": {
+        "task": "bookings.expire_pending",
+        "schedule": 10.0,                   # mỗi 10 giây
+        "options": {"expires": 10},         # task cũ hơn 10 giây thì bỏ qua
+    },
+    "flush-expired-jwt-tokens": {
+        "task": "users.flush_expired_tokens",
+        "schedule": crontab(hour=3, minute=0),   # 3h sáng mỗi ngày
+    },
+}
+
+# --- Email (dev: Mailpit hứng thư, không gửi ra ngoài) ---
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", default="mailpit")
+EMAIL_PORT = env.int("EMAIL_PORT", default=1025)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Cinema Booking admin@gmail.com")
