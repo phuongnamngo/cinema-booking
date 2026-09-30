@@ -35,6 +35,7 @@ ALLOWED_HOSTS = ["*"] if DEBUG else env.list("ALLOWED_HOSTS", default=[])
 # Application definition
 
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -176,3 +177,12 @@ CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
 REDIS_URL = env("REDIS_URL")
 SEAT_HOLD_SECONDS = env.int("SEAT_HOLD_SECONDS", default=600)   # 10 phút
 MAX_SEATS_PER_BOOKING = env.int("MAX_SEATS_PER_BOOKING", default=8)
+
+ASGI_APPLICATION = "config.asgi.application"
+
+CHANNEL_LAYERS = {
+    "default": {
+        "BACKEND": "channels_redis.core.RedisChannelLayer",
+        "CONFIG": {"hosts": [REDIS_URL]},
+    }
+}

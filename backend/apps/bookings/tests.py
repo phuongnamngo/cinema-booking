@@ -1,5 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from unittest.mock import patch
+
+from . import services
 
 from django.conf import settings
 from django.db import IntegrityError, connection, transaction
@@ -17,20 +20,31 @@ from apps.users.models import User
 from .holds import get_redis, hold_key
 from .models import Booking, BookingSeat
 
+TEST_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
 TEST_REDIS_URL = "redis://redis:6379/15"
 
 
 def build_showtime(start_in=timedelta(days=1)):
     movie = Movie.objects.create(
-        title="Phim A", duration_minutes=120, release_date="2026-10-01", status="now_showing"
+        title="Phim A",
+        duration_minutes=120,
+        release_date="2026-10-01",
+        status="now_showing",
     )
     cinema = Cinema.objects.create(name="C1", address="x", city="HCM")
     room = Room.objects.create(cinema=cinema, name="R1")
-    generate_seats(room, rows=2, seats_per_row=3, vip_rows=["B"])   # A1-A3 thường, B1-B3 VIP
+    generate_seats(
+        room, rows=2, seats_per_row=3, vip_rows=["B"]
+    )  # A1-A3 thường, B1-B3 VIP
     start = (timezone.now() + start_in).replace(minute=0, second=0, microsecond=0)
     return Showtime.objects.create(
-        movie=movie, room=room, start_time=start,
-        price_standard=80000, price_vip=100000, price_couple=180000,
+        movie=movie,
+        room=room,
+        start_time=start,
+        price_standard=80000,
+        price_vip=100000,
+        price_couple=180000,
     )
 
 
@@ -38,7 +52,7 @@ def seat(showtime, row, number):
     return Seat.objects.get(room=showtime.room, row=row, number=number)
 
 
-@override_settings(REDIS_URL=TEST_REDIS_URL)
+@override_settings(REDIS_URL=TEST_REDIS_URL, CHANNEL_LAYERS=TEST_CHANNEL_LAYERS)
 class BookingApiTests(APITestCase):
     def setUp(self):
         get_redis().flushdb()
@@ -109,19 +123,27 @@ class BookingApiTests(APITestCase):
 
     def test_expired_hold_is_lazily_released(self):
         code = self.hold(self.alice, self.a1).data["code"]
-        Booking.objects.filter(code=code).update(expires_at=timezone.now() - timedelta(seconds=1))
-        get_redis().delete(self.key(self.a1))   # giả lập TTL Redis đã hết
+        Booking.objects.filter(code=code).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        get_redis().delete(self.key(self.a1))  # giả lập TTL Redis đã hết
         self.assertEqual(self.hold(self.bob, self.a1).status_code, 201)
         self.assertEqual(Booking.objects.get(code=code).status, Booking.Status.EXPIRED)
-        self.assertFalse(BookingSeat.objects.filter(booking__code=code, is_active=True).exists())
+        self.assertFalse(
+            BookingSeat.objects.filter(booking__code=code, is_active=True).exists()
+        )
 
     def test_db_constraint_blocks_double_booking_without_redis(self):
         def new_item(user):
             booking = Booking.objects.create(
-                user=user, showtime=self.showtime, total_amount=80000,
+                user=user,
+                showtime=self.showtime,
+                total_amount=80000,
                 expires_at=timezone.now() + timedelta(minutes=10),
             )
-            return BookingSeat(booking=booking, showtime=self.showtime, seat=self.a1, price=80000)
+            return BookingSeat(
+                booking=booking, showtime=self.showtime, seat=self.a1, price=80000
+            )
 
         new_item(self.alice).save()
         with self.assertRaises(IntegrityError), transaction.atomic():
@@ -159,13 +181,14 @@ class BookingApiTests(APITestCase):
         self.client.force_authenticate(self.alice)
         res = self.client.post(
             reverse("showtime-hold", args=[past.id]),
-            {"seat_ids": [seat(past, "A", 1).id]}, format="json",
+            {"seat_ids": [seat(past, "A", 1).id]},
+            format="json",
         )
         self.assertEqual(res.status_code, 400)
 
     def test_seat_list_validation(self):
         self.client.force_authenticate(self.alice)
-        for ids in ([], [1, 1], list(range(1, 10))):   # rỗng, trùng, quá 8 ghế
+        for ids in ([], [1, 1], list(range(1, 10))):  # rỗng, trùng, quá 8 ghế
             res = self.client.post(self.hold_url, {"seat_ids": ids}, format="json")
             self.assertEqual(res.status_code, 400, ids)
 
@@ -183,8 +206,46 @@ class BookingApiTests(APITestCase):
         self.assertEqual(self.client.get(reverse("booking-list")).data["count"], 1)
         self.assertEqual(self.client.get(detail).status_code, 200)
 
+    def test_hold_broadcasts_after_commit(self):
+        with patch("apps.bookings.realtime.broadcast_seats") as broadcast:
+            with self.captureOnCommitCallbacks(execute=True):
+                self.hold(self.alice, self.a1, self.a2)
+        broadcast.assert_called_once_with(
+            self.showtime.id, "seats_held", [self.a1.id, self.a2.id]
+        )
 
-@override_settings(REDIS_URL=TEST_REDIS_URL)
+    def test_failed_hold_does_not_broadcast(self):
+        self.hold(self.alice, self.a1)
+        with patch("apps.bookings.realtime.broadcast_seats") as broadcast:
+            with self.captureOnCommitCallbacks(execute=True):
+                res = self.hold(self.bob, self.a1)
+        self.assertEqual(res.status_code, 409)
+        broadcast.assert_not_called()
+
+    def test_cancel_broadcasts_release(self):
+        code = self.hold(self.alice, self.a1).data["code"]
+        self.client.force_authenticate(self.alice)
+        with patch("apps.bookings.realtime.broadcast_seats") as broadcast:
+            with self.captureOnCommitCallbacks(execute=True):
+                self.client.post(reverse("booking-cancel", kwargs={"code": code}))
+        broadcast.assert_called_once_with(
+            self.showtime.id, "seats_released", [self.a1.id]
+        )
+
+    def test_lazy_expiry_broadcasts_release(self):
+        code = self.hold(self.alice, self.a1).data["code"]
+        Booking.objects.filter(code=code).update(
+            expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        with patch("apps.bookings.realtime.broadcast_seats") as broadcast:
+            with self.captureOnCommitCallbacks(execute=True):
+                services.expire_pending_bookings()
+        broadcast.assert_called_once_with(
+            self.showtime.id, "seats_released", [self.a1.id]
+        )
+
+
+@override_settings(REDIS_URL=TEST_REDIS_URL, CHANNEL_LAYERS=TEST_CHANNEL_LAYERS)
 class ConcurrentHoldTests(TransactionTestCase):
     """TransactionTestCase để các thread thấy dữ liệu đã commit của nhau."""
 
@@ -193,7 +254,8 @@ class ConcurrentHoldTests(TransactionTestCase):
         self.showtime = build_showtime()
         self.seat = seat(self.showtime, "A", 1)
         self.users = [
-            User.objects.create(username=f"u{i}", email=f"u{i}@example.com") for i in range(20)
+            User.objects.create(username=f"u{i}", email=f"u{i}@example.com")
+            for i in range(20)
         ]
 
     def tearDown(self):
@@ -206,13 +268,17 @@ class ConcurrentHoldTests(TransactionTestCase):
             try:
                 client = APIClient()
                 client.force_authenticate(user)
-                return client.post(url, {"seat_ids": [self.seat.id]}, format="json").status_code
+                return client.post(
+                    url, {"seat_ids": [self.seat.id]}, format="json"
+                ).status_code
             finally:
-                connection.close()   # mỗi thread có kết nối DB riêng, phải đóng
+                connection.close()  # mỗi thread có kết nối DB riêng, phải đóng
 
         with ThreadPoolExecutor(max_workers=20) as pool:
             codes = list(pool.map(attempt, self.users))
 
         self.assertEqual(codes.count(201), 1, codes)
         self.assertEqual(codes.count(409), 19, codes)
-        self.assertEqual(BookingSeat.objects.filter(seat=self.seat, is_active=True).count(), 1)
+        self.assertEqual(
+            BookingSeat.objects.filter(seat=self.seat, is_active=True).count(), 1
+        )
