@@ -45,5 +45,17 @@ services:
     <<: *backend
     command: celery -A config beat -l info --schedule /tmp/celerybeat-schedule
 
+  frontend:
+    build: ./frontend
+    command: npm run dev
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules   # giữ node_modules của container, không bị bind mount che
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
 volumes:
   pgdata:
+  frontend_node_modules:
