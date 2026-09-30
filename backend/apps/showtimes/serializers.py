@@ -16,8 +16,19 @@ class ShowtimeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Showtime
         fields = (
-            "id", "movie", "movie_title", "room", "room_name", "cinema_id", "cinema_name",
-            "start_time", "end_time", "price_standard", "price_vip", "price_couple", "is_active",
+            "id",
+            "movie",
+            "movie_title",
+            "room",
+            "room_name",
+            "cinema_id",
+            "cinema_name",
+            "start_time",
+            "end_time",
+            "price_standard",
+            "price_vip",
+            "price_couple",
+            "is_active",
         )
 
     def validate(self, attrs):
@@ -38,13 +49,20 @@ class ShowtimeSerializer(serializers.ModelSerializer):
 
 
 class ShowtimeSeatSerializer(SeatSerializer):
-    """Ghế kèm giá theo suất chiếu. Bước sau sẽ thêm trạng thái ghế."""
+    """Ghế kèm giá và trạng thái theo suất chiếu."""
 
     price = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
 
     class Meta(SeatSerializer.Meta):
-        fields = SeatSerializer.Meta.fields + ("price",)
+        fields = SeatSerializer.Meta.fields + ("price", "status")
 
     @extend_schema_field(int)
     def get_price(self, seat):
         return self.context["showtime"].price_for(seat.seat_type)
+
+    @extend_schema_field(
+        serializers.ChoiceField(choices=["available", "held", "mine", "sold"])
+    )
+    def get_status(self, seat):
+        return self.context["seat_states"].get(seat.id, "available")

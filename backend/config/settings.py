@@ -51,6 +51,7 @@ INSTALLED_APPS = [
     "apps.movies",
     "apps.cinemas",
     "apps.showtimes",
+    "apps.bookings",
 ]
 
 MIDDLEWARE = [
@@ -171,3 +172,7 @@ SPECTACULAR_SETTINGS = {
 }
 
 CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
+
+REDIS_URL = env("REDIS_URL")
+SEAT_HOLD_SECONDS = env.int("SEAT_HOLD_SECONDS", default=600)   # 10 phút
+MAX_SEATS_PER_BOOKING = env.int("MAX_SEATS_PER_BOOKING", default=8)

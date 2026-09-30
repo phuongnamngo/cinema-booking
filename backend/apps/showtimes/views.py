@@ -6,6 +6,7 @@ from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
 from rest_framework.response import Response
+from apps.bookings.selectors import get_seat_states
 
 from apps.users.permissions import IsAdminOrReadOnly, is_admin
 
@@ -15,7 +16,7 @@ from .serializers import ShowtimeSeatSerializer, ShowtimeSerializer
 
 
 class ShowtimePagination(PageNumberPagination):
-    page_size = 50                       # lịch chiếu một ngày thường nhiều hơn 12
+    page_size = 50  # lịch chiếu một ngày thường nhiều hơn 12
     page_size_query_param = "page_size"
     max_page_size = 200
 
@@ -26,7 +27,14 @@ class ShowtimeViewSet(viewsets.ModelViewSet):
     pagination_class = ShowtimePagination
     filterset_class = ShowtimeFilter
     ordering_fields = ["start_time"]
-    http_method_names = ["get", "post", "put", "patch", "head", "options"]   # hủy = PATCH is_active
+    http_method_names = [
+        "get",
+        "post",
+        "put",
+        "patch",
+        "head",
+        "options",
+    ]  # hủy = PATCH is_active
 
     def get_queryset(self):
         qs = Showtime.objects.select_related("movie", "room__cinema")
@@ -41,7 +49,9 @@ class ShowtimeViewSet(viewsets.ModelViewSet):
             with transaction.atomic():
                 serializer.save()
         except IntegrityError:
-            raise ValidationError({"detail": "Xung đột lịch chiếu trong phòng, vui lòng thử lại."})
+            raise ValidationError(
+                {"detail": "Xung đột lịch chiếu trong phòng, vui lòng thử lại."}
+            )
 
     def perform_create(self, serializer):
         self._save(serializer)
@@ -55,6 +65,11 @@ class ShowtimeViewSet(viewsets.ModelViewSet):
         """GET /showtimes/{id}/seats/ - sơ đồ ghế kèm giá của suất chiếu."""
         showtime = self.get_object()
         serializer = ShowtimeSeatSerializer(
-            showtime.room.seats.all(), many=True, context={"showtime": showtime}
+            showtime.room.seats.all(),
+            many=True,
+            context={
+                "showtime": showtime,
+                "seat_states": get_seat_states(showtime, request.user),
+            },
         )
         return Response(serializer.data)
