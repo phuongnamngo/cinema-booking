@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     "apps.cinemas",
     "apps.showtimes",
     "apps.bookings",
+    "apps.payments",
 ]
 
 MIDDLEWARE = [
@@ -216,3 +217,8 @@ EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.Ema
 EMAIL_HOST = env("EMAIL_HOST", default="mailpit")
 EMAIL_PORT = env.int("EMAIL_PORT", default=1025)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Cinema Booking admin@gmail.com")
+
+# --- Payments ---
+PAYMENT_WEBHOOK_SECRET = env("PAYMENT_WEBHOOK_SECRET")
+PAYMENT_MOCK_ENABLED = env.bool("PAYMENT_MOCK_ENABLED", default=DEBUG)   # chỉ bật khi dev
+PAYMENT_MIN_SECONDS_TO_PAY = 60   # đơn còn dưới ngần này thì không cho bắt đầu thanh toán

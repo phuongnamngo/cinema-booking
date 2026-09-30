@@ -1,3 +1,10 @@
+import io
+
+import qrcode
+from django.http import Http404, HttpResponse
+from drf_spectacular.types import OpenApiTypes
+from qrcode.image.svg import SvgPathImage
+
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, status, viewsets
@@ -15,26 +22,31 @@ from .services import cancel_pending_booking, expire_pending_bookings, hold_seat
 
 class HoldSeatsView(APIView):
     """POST /showtimes/{id}/hold/ - giữ ghế. Đặt ở app bookings (không phải @action của
-    ShowtimeViewSet) vì customer cần quyền ghi, còn ShowtimeViewSet chỉ cho admin ghi."""
+    ShowtimeViewSet) vì customer cần quyền ghi, còn ShowtimeViewSet chỉ cho admin ghi.
+    """
 
     @extend_schema(request=HoldSeatsSerializer, responses={201: BookingSerializer})
     def post(self, request, showtime_id):
         showtime = get_object_or_404(
             Showtime.objects.select_related("movie", "room__cinema"),
-            pk=showtime_id, is_active=True,
+            pk=showtime_id,
+            is_active=True,
         )
         serializer = HoldSeatsSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
         booking = hold_seats(
-            user=request.user, showtime=showtime,
+            user=request.user,
+            showtime=showtime,
             seat_ids=serializer.validated_data["seat_ids"],
         )
         booking = bookings_with_details().get(pk=booking.pk)
         return Response(BookingSerializer(booking).data, status=status.HTTP_201_CREATED)
 
 
-class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+class BookingViewSet(
+    mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
+):
     """Đơn đặt vé của chính người dùng đang đăng nhập."""
 
     serializer_class = BookingSerializer
@@ -42,9 +54,11 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
     filterset_fields = ["status"]
 
     def get_queryset(self):
-        if getattr(self, "swagger_fake_view", False):   # drf-spectacular tự dò schema
+        if getattr(self, "swagger_fake_view", False):  # drf-spectacular tự dò schema
             return Booking.objects.none()
-        expire_pending_bookings(user=self.request.user)   # cập nhật trạng thái đơn hết hạn của user
+        expire_pending_bookings(
+            user=self.request.user
+        )  # cập nhật trạng thái đơn hết hạn của user
         return bookings_with_details().filter(user=self.request.user)
 
     @extend_schema(request=None, responses=BookingSerializer)
@@ -55,3 +69,14 @@ class BookingViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.
         cancel_pending_booking(booking)
         booking = bookings_with_details().get(pk=booking.pk)
         return Response(self.get_serializer(booking).data)
+
+    @extend_schema(request=None, responses={200: OpenApiTypes.BINARY})
+    @action(detail=True, methods=["get"])
+    def qr(self, request, code=None):
+        """GET /bookings/{code}/qr/ - mã QR (SVG) của vé đã thanh toán."""
+        booking = self.get_object()  # chỉ đơn của chính user, còn lại là 404
+        if booking.status != Booking.Status.CONFIRMED:
+            raise Http404
+        buffer = io.BytesIO()
+        qrcode.make(booking.code, image_factory=SvgPathImage).save(buffer)
+        return HttpResponse(buffer.getvalue(), content_type="image/svg+xml")

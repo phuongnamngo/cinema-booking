@@ -175,3 +175,26 @@ def cancel_pending_booking(booking):
 
     transaction.on_commit(after_commit)
     return booking
+
+
+def confirm_booking(booking):
+    """Đơn đã thanh toán: PENDING -> CONFIRMED.
+
+    Gọi bên trong transaction.atomic, booking đã được select_for_update.
+    Các BookingSeat giữ nguyên is_active=True nên unique constraint tiếp tục
+    chặn ghế này vĩnh viễn: ghế trở thành 'đã bán'.
+    """
+    if booking.status != Booking.Status.PENDING:
+        raise BookingNotPending()
+
+    booking.status = Booking.Status.CONFIRMED
+    booking.save(update_fields=["status", "updated_at"])
+
+    seat_ids = list(booking.items.order_by("seat_id").values_list("seat_id", flat=True))
+    showtime_id, code = booking.showtime_id, booking.code
+
+    def after_commit():
+        _release_quietly(showtime_id, seat_ids, code)  # khóa Redis không còn cần nữa
+        realtime.broadcast_seats(showtime_id, "seats_sold", seat_ids)
+
+    transaction.on_commit(after_commit)
