@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from .models import User
 
+
 # Register your models here.
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
@@ -10,8 +11,8 @@ class UserAdmin(DjangoUserAdmin):
     search_fields = ("username", "email", "phone")
 
     fieldsets = DjangoUserAdmin.fieldsets + (
-        ("Cinema", {"fields": ("phone", "role")}),
+        ("Cinema", {"fields": ("phone", "role", "cinema")}),
     )
     add_fieldsets = DjangoUserAdmin.add_fieldsets + (
-        ("Cinema", {"fields": ("email", "phone", "role")}),
+        ("Cinema", {"fields": ("email", "phone", "role", "cinema")}),
     )

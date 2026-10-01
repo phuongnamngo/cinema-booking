@@ -13,6 +13,14 @@ class User(AbstractUser):
     email = models.EmailField(unique=True)
     phone = models.CharField(max_length=20, blank=True)
     role = models.CharField(max_length=20, choices=Role.choices, default=Role.CUSTOMER)
+    cinema = models.ForeignKey(
+        "cinemas.Cinema",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="staff",
+        help_text="Rạp mà nhân viên phụ trách (chỉ có ý nghĩa với role staff).",
+    )
 
     def save(self, *args, **kwargs):
         if self.is_superuser:

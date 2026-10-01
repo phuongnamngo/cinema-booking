@@ -15,10 +15,27 @@ class BookingSeatInline(admin.TabularInline):
 
 @admin.register(Booking)
 class BookingAdmin(admin.ModelAdmin):
-    list_display = ("code", "user", "showtime", "status", "total_amount", "expires_at")
+    list_display = (
+        "code",
+        "user",
+        "showtime",
+        "status",
+        "total_amount",
+        "expires_at",
+        "checked_in_at",
+    )
     list_filter = ("status",)
     search_fields = ("code", "user__email")
     list_select_related = ("user", "showtime__movie", "showtime__room")
     # Không cho sửa tay: đổi trạng thái phải qua services để cờ is_active luôn đồng bộ
-    readonly_fields = ("code", "user", "showtime", "status", "total_amount", "expires_at")
+    readonly_fields = (
+        "code",
+        "user",
+        "showtime",
+        "status",
+        "total_amount",
+        "expires_at",
+        "checked_in_at",
+        "checked_in_by",
+    )
     inlines = [BookingSeatInline]

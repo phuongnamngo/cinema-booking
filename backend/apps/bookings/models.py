@@ -28,17 +28,27 @@ class Booking(models.Model):
     showtime = models.ForeignKey(
         "showtimes.Showtime", on_delete=models.PROTECT, related_name="bookings"
     )
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    total_amount = models.PositiveIntegerField(default=0)   # VND
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
+    total_amount = models.PositiveIntegerField(default=0)  # VND
     expires_at = models.DateTimeField()
+    checked_in_at = models.DateTimeField(null=True, blank=True)
+    checked_in_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="checkins",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-created_at"]
         indexes = [
-            models.Index(fields=["status", "expires_at"]),   # quét booking hết hạn
-            models.Index(fields=["user", "-created_at"]),    # "vé của tôi"
+            models.Index(fields=["status", "expires_at"]),  # quét booking hết hạn
+            models.Index(fields=["user", "-created_at"]),  # "vé của tôi"
         ]
         constraints = [
             # Mỗi user chỉ có 1 đơn đang giữ ghế cho mỗi suất chiếu
@@ -46,6 +56,10 @@ class Booking(models.Model):
                 fields=["user", "showtime"],
                 condition=Q(status="pending"),
                 name="one_pending_booking_per_user_showtime",
+            ),
+            models.CheckConstraint(
+                condition=Q(checked_in_at__isnull=True) | Q(status="confirmed"),
+                name="checkin_only_when_confirmed",
             ),
         ]
 
@@ -56,9 +70,11 @@ class Booking(models.Model):
 class BookingSeat(models.Model):
     booking = models.ForeignKey(Booking, on_delete=models.CASCADE, related_name="items")
     # Denormalize từ booking.showtime để làm partial unique index
-    showtime = models.ForeignKey("showtimes.Showtime", on_delete=models.PROTECT, related_name="+")
+    showtime = models.ForeignKey(
+        "showtimes.Showtime", on_delete=models.PROTECT, related_name="+"
+    )
     seat = models.ForeignKey("cinemas.Seat", on_delete=models.PROTECT, related_name="+")
-    price = models.PositiveIntegerField()   # giá chốt tại thời điểm giữ ghế
+    price = models.PositiveIntegerField()  # giá chốt tại thời điểm giữ ghế
     # True khi booking là PENDING/CONFIRMED. Chỉ đổi qua services.py
     is_active = models.BooleanField(default=True)
 
@@ -70,7 +86,9 @@ class BookingSeat(models.Model):
                 condition=Q(is_active=True),
                 name="uniq_active_seat_per_showtime",
             ),
-            models.UniqueConstraint(fields=["booking", "seat"], name="uniq_seat_per_booking"),
+            models.UniqueConstraint(
+                fields=["booking", "seat"], name="uniq_seat_per_booking"
+            ),
         ]
 
     def __str__(self):

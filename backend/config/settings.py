@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     "apps.showtimes",
     "apps.bookings",
     "apps.payments",
+    "apps.reports",
 ]
 
 MIDDLEWARE = [
@@ -177,7 +178,7 @@ SPECTACULAR_SETTINGS = {
 CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
 
 REDIS_URL = env("REDIS_URL")
-SEAT_HOLD_SECONDS = env.int("SEAT_HOLD_SECONDS", default=600)   # 10 phút
+SEAT_HOLD_SECONDS = env.int("SEAT_HOLD_SECONDS", default=600)  # 10 phút
 MAX_SEATS_PER_BOOKING = env.int("MAX_SEATS_PER_BOOKING", default=8)
 
 ASGI_APPLICATION = "config.asgi.application"
@@ -192,8 +193,8 @@ CHANNEL_LAYERS = {
 # --- Celery ---
 CELERY_BROKER_URL = env("CELERY_BROKER_URL", default="redis://redis:6379/1")
 CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP = True
-CELERY_TIMEZONE = TIME_ZONE                 # crontab hiểu theo giờ Việt Nam
-CELERY_TASK_IGNORE_RESULT = True            # không cần result backend
+CELERY_TIMEZONE = TIME_ZONE  # crontab hiểu theo giờ Việt Nam
+CELERY_TASK_IGNORE_RESULT = True  # không cần result backend
 CELERY_TASK_ACKS_LATE = True
 CELERY_TASK_REJECT_ON_WORKER_LOST = True
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
@@ -203,22 +204,31 @@ CELERY_TASK_TIME_LIMIT = 60
 CELERY_BEAT_SCHEDULE = {
     "expire-pending-bookings": {
         "task": "bookings.expire_pending",
-        "schedule": 10.0,                   # mỗi 10 giây
-        "options": {"expires": 10},         # task cũ hơn 10 giây thì bỏ qua
+        "schedule": 10.0,  # mỗi 10 giây
+        "options": {"expires": 10},  # task cũ hơn 10 giây thì bỏ qua
     },
     "flush-expired-jwt-tokens": {
         "task": "users.flush_expired_tokens",
-        "schedule": crontab(hour=3, minute=0),   # 3h sáng mỗi ngày
+        "schedule": crontab(hour=3, minute=0),  # 3h sáng mỗi ngày
     },
 }
 
 # --- Email (dev: Mailpit hứng thư, không gửi ra ngoài) ---
-EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend"
+)
 EMAIL_HOST = env("EMAIL_HOST", default="mailpit")
 EMAIL_PORT = env.int("EMAIL_PORT", default=1025)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Cinema Booking admin@gmail.com")
 
 # --- Payments ---
 PAYMENT_WEBHOOK_SECRET = env("PAYMENT_WEBHOOK_SECRET")
-PAYMENT_MOCK_ENABLED = env.bool("PAYMENT_MOCK_ENABLED", default=DEBUG)   # chỉ bật khi dev
-PAYMENT_MIN_SECONDS_TO_PAY = 60   # đơn còn dưới ngần này thì không cho bắt đầu thanh toán
+PAYMENT_MOCK_ENABLED = env.bool(
+    "PAYMENT_MOCK_ENABLED", default=DEBUG
+)  # chỉ bật khi dev
+PAYMENT_MIN_SECONDS_TO_PAY = (
+    60  # đơn còn dưới ngần này thì không cho bắt đầu thanh toán
+)
+
+# --- Check-in ---
+CHECKIN_OPENS_BEFORE_MINUTES = env.int("CHECKIN_OPENS_BEFORE_MINUTES", default=60)

@@ -5,7 +5,7 @@ from django.db.models import Q
 
 
 def new_txn_ref():
-    return uuid.uuid4().hex   # mã giao dịch của mình gửi sang cổng (32 ký tự)
+    return uuid.uuid4().hex  # mã giao dịch của mình gửi sang cổng (32 ký tự)
 
 
 class Payment(models.Model):
@@ -17,19 +17,32 @@ class Payment(models.Model):
         PENDING = "pending", "Chờ thanh toán"
         SUCCEEDED = "succeeded", "Thành công"
         FAILED = "failed", "Thất bại"
-        NEEDS_REVIEW = "needs_review", "Cần xử lý thủ công"   # tiền đã thu nhưng không xác nhận được đơn
+        NEEDS_REVIEW = (
+            "needs_review",
+            "Cần xử lý thủ công",
+        )  # tiền đã thu nhưng không xác nhận được đơn
 
     booking = models.ForeignKey(
         "bookings.Booking", on_delete=models.PROTECT, related_name="payments"
     )
-    provider = models.CharField(max_length=20, choices=Provider.choices, default=Provider.MOCK)
-    txn_ref = models.CharField(max_length=32, unique=True, default=new_txn_ref, editable=False)
-    amount = models.PositiveIntegerField()   # VND, lấy từ booking.total_amount
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    provider = models.CharField(
+        max_length=20, choices=Provider.choices, default=Provider.MOCK
+    )
+    txn_ref = models.CharField(
+        max_length=32, unique=True, default=new_txn_ref, editable=False
+    )
+    amount = models.PositiveIntegerField()  # VND, lấy từ booking.total_amount
+    status = models.CharField(
+        max_length=20, choices=Status.choices, default=Status.PENDING
+    )
 
-    gateway_txn_id = models.CharField(max_length=64, blank=True)   # mã giao dịch phía cổng
+    gateway_txn_id = models.CharField(
+        max_length=64, blank=True
+    )  # mã giao dịch phía cổng
     failure_reason = models.CharField(max_length=255, blank=True)
-    raw_payload = models.JSONField(null=True, blank=True)          # webhook đầu tiên, để đối soát
+    raw_payload = models.JSONField(
+        null=True, blank=True
+    )  # webhook đầu tiên, để đối soát
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -39,14 +52,17 @@ class Payment(models.Model):
         ordering = ["-created_at"]
         constraints = [
             models.UniqueConstraint(
-                fields=["booking"], condition=Q(status="pending"),
+                fields=["booking"],
+                condition=Q(status="pending"),
                 name="one_pending_payment_per_booking",
             ),
             models.UniqueConstraint(
-                fields=["booking"], condition=Q(status="succeeded"),
+                fields=["booking"],
+                condition=Q(status="succeeded"),
                 name="one_succeeded_payment_per_booking",
             ),
         ]
+        indexes = [models.Index(fields=["status", "paid_at"])]
 
     def __str__(self):
         return f"{self.txn_ref} ({self.status})"

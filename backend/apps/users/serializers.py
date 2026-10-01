@@ -18,7 +18,7 @@ class UserSerializer(serializers.ModelSerializer):
             "role",
             "date_joined",
         )
-        read_only_fields = ("id", "username", "email", "role", "date_joined")
+        read_only_fields = ("id", "username", "email", "role", "cinema", "date_joined")
 
 
 class RegisterSerializer(serializers.ModelSerializer):

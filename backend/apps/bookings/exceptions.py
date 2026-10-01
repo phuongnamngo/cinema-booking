@@ -8,7 +8,11 @@ class SeatUnavailable(APIException):
     default_code = "seat_unavailable"
 
     def __init__(self, labels=None):
-        detail = f"Ghế {', '.join(labels)} không còn trống, vui lòng chọn ghế khác." if labels else None
+        detail = (
+            f"Ghế {', '.join(labels)} không còn trống, vui lòng chọn ghế khác."
+            if labels
+            else None
+        )
         super().__init__(detail)
 
 
@@ -33,3 +37,16 @@ class HoldServiceUnavailable(APIException):
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     default_detail = "Hệ thống giữ ghế tạm thời không khả dụng, vui lòng thử lại."
     default_code = "hold_unavailable"
+
+
+class TicketRejected(APIException):
+    """Vé không thể check-in. `reason` là mã máy đọc được để FE hiển thị đúng thông báo."""
+
+    status_code = status.HTTP_409_CONFLICT
+    default_code = "ticket_rejected"
+
+    def __init__(self, reason, message, **extra):
+        self.reason = reason
+        self.message = message
+        # Lưu ý: DRF ép mọi giá trị trong detail thành chuỗi, nên không đưa None vào đây
+        super().__init__({"detail": message, "reason": reason, **extra})
