@@ -23,6 +23,9 @@ export function Layout() {
           <nav className="flex items-center gap-3 text-sm">
             {status === "authenticated" && user ? (
               <>
+                <Link to="/bookings" className="text-slate-300 hover:text-white">
+                  Vé của tôi
+                </Link>
                 <Link to="/account" className="text-slate-300 hover:text-white">
                   {user.first_name || user.username}
                 </Link>

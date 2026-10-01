@@ -61,3 +61,49 @@ export interface Showtime {
   price_couple: number;
   is_active: boolean;
 }
+
+export type SeatType = "standard" | "vip" | "couple";
+export type SeatState = "available" | "held" | "mine" | "sold";
+export type BookingStatus = "pending" | "confirmed" | "expired" | "cancelled";
+
+export interface ShowtimeSeat {
+  id: number;
+  row: string;
+  number: number;
+  label: string; // "A1"
+  seat_type: SeatType;
+  price: number;
+  status: SeatState;
+}
+
+export interface BookingSeat {
+  seat: number;
+  label: string;
+  seat_type: SeatType;
+  price: number;
+}
+
+export interface Booking {
+  id: number;
+  code: string;
+  status: BookingStatus;
+  total_amount: number;
+  expires_at: string;
+  seconds_left: number;
+  showtime: number;
+  movie_title: string;
+  cinema_name: string;
+  room_name: string;
+  start_time: string;
+  seats: BookingSeat[];
+  created_at: string;
+}
+
+export interface Payment {
+  txn_ref: string;
+  booking_code: string;
+  amount: number;
+  status: "pending" | "succeeded" | "failed" | "needs_review";
+  payment_url: string | null;
+  expires_at: string;
+}

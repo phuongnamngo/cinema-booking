@@ -106,6 +106,9 @@ class MockGatewayView(View):
         outcome = services.handle_webhook(body, gateways.sign(body))
 
         return self._page(payment, format_html(
-            "<p>Kết quả xử lý: <b>{}</b></p><p>Cổng thật sẽ đưa trình duyệt về trang kết quả "
-            "của web. Ở đó React hỏi lại API để biết trạng thái đơn.</p>", outcome,
+            '<p>Kết quả xử lý: <b>{}</b></p>'
+            '<p><a href="/bookings/{}">← Quay về trang vé</a></p>'
+            '<p style="color:#666;font-size:13px">Cổng thật sẽ tự đưa trình duyệt về đây (return URL). '
+            'Trang vé không tin việc quay về, mà hỏi lại API để biết đơn đã thanh toán chưa.</p>',
+            outcome, payment.booking.code,
         ))

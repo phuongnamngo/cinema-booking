@@ -131,7 +131,7 @@ async function parseBody(res: Response): Promise<unknown> {
   }
 }
 
-export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+async function request(path: string, options: RequestOptions = {}): Promise<Response> {
   const { method = "GET", body, params, auth = true, signal } = options;
   const url = buildUrl(path, params);
 
@@ -156,8 +156,19 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     const fresh = current && current !== sentToken ? current : await refreshAccessToken();
     if (fresh) res = await send(fresh);
   }
+  return res;
+}
 
+export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const res = await request(path, options);
   const data = await parseBody(res);
   if (!res.ok) throw new ApiError(res.status, data);
   return data as T;
+}
+
+/** Cho endpoint trả file (vd mã QR). Vẫn gắn token và tự refresh như apiFetch */
+export async function apiBlob(path: string, options: RequestOptions = {}): Promise<Blob> {
+  const res = await request(path, options);
+  if (!res.ok) throw new ApiError(res.status, await parseBody(res));
+  return res.blob();
 }

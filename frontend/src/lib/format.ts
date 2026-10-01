@@ -30,3 +30,15 @@ export function nextDays(count: number): Date[] {
     return d;
   });
 }
+
+const dateTimeFmt = new Intl.DateTimeFormat("vi-VN", {
+  hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  day: "2-digit", month: "2-digit", year: "numeric", timeZone: TZ,
+});
+
+export const formatDateTime = (iso: string) => dateTimeFmt.format(new Date(iso));
+
+export function formatCountdown(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
