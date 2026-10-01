@@ -3,7 +3,7 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from .models import Booking, BookingSeat
+from .models import Booking, BookingSeat, BookingCombo
 
 
 class HoldSeatsSerializer(serializers.Serializer):
@@ -28,33 +28,48 @@ class BookingSeatSerializer(serializers.ModelSerializer):
         fields = ("seat", "label", "seat_type", "price")
 
 
+class BookingComboSerializer(serializers.ModelSerializer):
+    name = serializers.CharField(source="combo.name", read_only=True)
+    line_total = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = BookingCombo
+        fields = ("combo", "name", "quantity", "unit_price", "line_total")
+        read_only_fields = fields
+
+
+class ComboLineSerializer(serializers.Serializer):
+    combo = serializers.IntegerField(min_value=1)
+    quantity = serializers.IntegerField(min_value=1, max_value=10)
+
+
+class SetCombosSerializer(serializers.Serializer):
+    items = ComboLineSerializer(many=True, allow_empty=True, max_length=10)
+
+
+class ApplyVoucherSerializer(serializers.Serializer):
+    code = serializers.CharField(max_length=32)
+
+
 class BookingSerializer(serializers.ModelSerializer):
     seats = BookingSeatSerializer(source="items", many=True, read_only=True)
+    combos = BookingComboSerializer(source="combo_lines", many=True, read_only=True)
     movie_title = serializers.CharField(source="showtime.movie.title", read_only=True)
-    cinema_name = serializers.CharField(
-        source="showtime.room.cinema.name", read_only=True
-    )
+    cinema_name = serializers.CharField(source="showtime.room.cinema.name", read_only=True)
     room_name = serializers.CharField(source="showtime.room.name", read_only=True)
     start_time = serializers.DateTimeField(source="showtime.start_time", read_only=True)
     seconds_left = serializers.SerializerMethodField()
+    seats_amount = serializers.SerializerMethodField()
+    combos_amount = serializers.SerializerMethodField()
+    voucher_code = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
         fields = (
-            "id",
-            "code",
-            "status",
-            "total_amount",
-            "expires_at",
-            "checked_in_at",
-            "seconds_left",
-            "showtime",
-            "movie_title",
-            "cinema_name",
-            "room_name",
-            "start_time",
-            "seats",
-            "created_at",
+            "id", "code", "status", "total_amount", "seats_amount", "combos_amount",
+            "discount_amount", "voucher_code", "expires_at", "checked_in_at", "seconds_left",
+            "showtime", "movie_title", "cinema_name", "room_name", "start_time",
+            "seats", "combos", "created_at",
         )
         read_only_fields = fields
 
@@ -63,6 +78,19 @@ class BookingSerializer(serializers.ModelSerializer):
         if booking.status != Booking.Status.PENDING:
             return 0
         return max(0, int((booking.expires_at - timezone.now()).total_seconds()))
+
+    # Tính trên dữ liệu đã prefetch: không phát sinh query mới cho mỗi đơn
+    @extend_schema_field(int)
+    def get_seats_amount(self, booking):
+        return sum(item.price for item in booking.items.all())
+
+    @extend_schema_field(int)
+    def get_combos_amount(self, booking):
+        return sum(line.line_total for line in booking.combo_lines.all())
+
+    @extend_schema_field(str)
+    def get_voucher_code(self, booking):
+        return booking.voucher.code if booking.voucher_id else None
 
 
 class CheckInSerializer(serializers.Serializer):

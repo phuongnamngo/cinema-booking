@@ -3,7 +3,7 @@ import logging
 from functools import partial
 
 from django.conf import settings
-from django.db import IntegrityError, transaction
+from django.db import transaction
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -30,24 +30,33 @@ class Outcome:
 
 def create_payment(booking):
     """Tạo (hoặc dùng lại) giao dịch đang chờ của đơn. Trả về (payment, created)."""
-    if booking.status != Booking.Status.PENDING:
-        raise BookingNotPending()
+    with transaction.atomic():
+        # Khóa booking: trong lúc ta chốt số tiền, không ai đổi được combo/voucher của đơn
+        booking = Booking.objects.select_for_update().get(pk=booking.pk)
 
-    seconds_left = (booking.expires_at - timezone.now()).total_seconds()
-    if seconds_left < settings.PAYMENT_MIN_SECONDS_TO_PAY:
-        raise ValidationError({"detail": "Đơn sắp hết hạn giữ ghế, vui lòng chọn lại ghế."})
+        if booking.status != Booking.Status.PENDING:
+            raise BookingNotPending()
+        seconds_left = (booking.expires_at - timezone.now()).total_seconds()
+        if seconds_left < settings.PAYMENT_MIN_SECONDS_TO_PAY:
+            raise ValidationError(
+                {"detail": "Đơn sắp hết hạn giữ ghế, vui lòng chọn lại ghế."}
+            )
 
-    existing = Payment.objects.filter(booking=booking, status=Payment.Status.PENDING).first()
-    if existing:
-        return existing, False   # bấm "Thanh toán" nhiều lần vẫn ra cùng một giao dịch
+        existing = Payment.objects.filter(
+            booking=booking, status=Payment.Status.PENDING
+        ).first()
+        if existing:
+            return (
+                existing,
+                False,
+            )  # bấm "Thanh toán" nhiều lần vẫn ra cùng một giao dịch
 
-    try:
-        with transaction.atomic():
-            # Số tiền do SERVER quyết định, client không gửi số tiền nào
-            return Payment.objects.create(booking=booking, amount=booking.total_amount), True
-    except IntegrityError:
-        # Hai request song song cùng tạo: unique constraint chặn, lấy bản của request thắng
-        return Payment.objects.get(booking=booking, status=Payment.Status.PENDING), False
+        # Số tiền do SERVER quyết định (đã gồm combo và giảm giá). Unique constraint "một payment
+        # pending mỗi đơn" vẫn là chốt chặn cuối ở DB
+        return (
+            Payment.objects.create(booking=booking, amount=booking.total_amount),
+            True,
+        )
 
 
 def handle_webhook(raw_body: bytes, signature: str | None) -> str:
@@ -88,9 +97,9 @@ def process_payment_result(*, txn_ref, gateway_txn_id, amount, success, payload)
     payment = Payment.objects.select_for_update().filter(txn_ref=txn_ref).first()
     if payment is None:
         logger.warning("Webhook cho giao dịch không tồn tại: %s", txn_ref)
-        return Outcome.IGNORED   # trả 200 để cổng ngừng gọi lại
+        return Outcome.IGNORED  # trả 200 để cổng ngừng gọi lại
     if payment.status != Payment.Status.PENDING:
-        return Outcome.DUPLICATE   # đã xử lý rồi: idempotent
+        return Outcome.DUPLICATE  # đã xử lý rồi: idempotent
 
     payment.gateway_txn_id = gateway_txn_id
     payment.raw_payload = payload
@@ -99,10 +108,14 @@ def process_payment_result(*, txn_ref, gateway_txn_id, amount, success, payload)
         payment.status = Payment.Status.FAILED
         payment.failure_reason = "declined_by_gateway"
         payment.save()
-        return Outcome.FAILED   # đơn vẫn PENDING, khách có thể thử lại đến khi hết hạn giữ ghế
+        return (
+            Outcome.FAILED
+        )  # đơn vẫn PENDING, khách có thể thử lại đến khi hết hạn giữ ghế
 
     if amount != payment.amount:
-        return _flag_for_review(payment, f"amount_mismatch: expected {payment.amount}, got {amount}")
+        return _flag_for_review(
+            payment, f"amount_mismatch: expected {payment.amount}, got {amount}"
+        )
 
     # Thứ tự khóa: payment -> booking (không nơi nào khóa ngược lại)
     booking = Booking.objects.select_for_update().get(pk=payment.booking_id)
@@ -110,11 +123,17 @@ def process_payment_result(*, txn_ref, gateway_txn_id, amount, success, payload)
         # Tiền đã thu nhưng đơn đã hết hạn/hủy, ghế có thể đã có người khác mua
         return _flag_for_review(payment, f"booking_{booking.status}")
 
+    if payment.amount != booking.total_amount:
+        # Không nên xảy ra (đơn bị khóa sửa khi có giao dịch chờ), nhưng đây là tiền: kiểm tra lại cho chắc
+        return _flag_for_review(payment, "booking_total_changed")
+
     payment.status = Payment.Status.SUCCEEDED
     payment.paid_at = timezone.now()
     payment.save()
 
-    confirm_booking(booking)   # PENDING -> CONFIRMED, sau commit: nhả Redis + broadcast seats_sold
+    confirm_booking(
+        booking
+    )  # PENDING -> CONFIRMED, sau commit: nhả Redis + broadcast seats_sold
     transaction.on_commit(
         partial(send_booking_confirmation_email.delay, booking.id), robust=True
     )

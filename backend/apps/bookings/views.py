@@ -16,8 +16,14 @@ from apps.showtimes.models import Showtime
 
 from .models import Booking
 from .selectors import bookings_with_details
-from .serializers import BookingSerializer, HoldSeatsSerializer
+from .serializers import (
+    BookingSerializer,
+    HoldSeatsSerializer,
+    ApplyVoucherSerializer,
+    SetCombosSerializer,
+)
 from .services import cancel_pending_booking, expire_pending_bookings, hold_seats
+from . import checkout
 
 
 class HoldSeatsView(APIView):
@@ -80,3 +86,30 @@ class BookingViewSet(
         buffer = io.BytesIO()
         qrcode.make(booking.code, image_factory=SvgPathImage).save(buffer)
         return HttpResponse(buffer.getvalue(), content_type="image/svg+xml")
+
+    def _respond(self, booking):
+        booking = bookings_with_details().get(pk=booking.pk)
+        return Response(self.get_serializer(booking).data)
+
+    @extend_schema(request=SetCombosSerializer, responses=BookingSerializer)
+    @action(detail=True, methods=["put"])
+    def combos(self, request, code=None):
+        """PUT /bookings/{code}/combos/ - đặt lại toàn bộ combo của đơn (gửi [] để xóa hết)."""
+        booking = self.get_object()
+        serializer = SetCombosSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        checkout.set_combos(booking, serializer.validated_data["items"])
+        return self._respond(booking)
+
+    @extend_schema(request=ApplyVoucherSerializer, responses=BookingSerializer)
+    @action(detail=True, methods=["put", "delete"])
+    def voucher(self, request, code=None):
+        """PUT: áp mã giảm giá (đổi mã nếu đã có). DELETE: gỡ mã."""
+        booking = self.get_object()
+        if request.method == "DELETE":
+            checkout.remove_voucher(booking)
+        else:
+            serializer = ApplyVoucherSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            checkout.apply_voucher(booking, serializer.validated_data["code"])
+        return self._respond(booking)

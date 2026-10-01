@@ -56,6 +56,7 @@ INSTALLED_APPS = [
     "apps.bookings",
     "apps.payments",
     "apps.reports",
+    "apps.promotions",
 ]
 
 MIDDLEWARE = [
@@ -232,3 +233,6 @@ PAYMENT_MIN_SECONDS_TO_PAY = (
 
 # --- Check-in ---
 CHECKIN_OPENS_BEFORE_MINUTES = env.int("CHECKIN_OPENS_BEFORE_MINUTES", default=60)
+
+# --- Promotions ---
+MIN_PAYABLE_AMOUNT = env.int("MIN_PAYABLE_AMOUNT", default=1000)   # đơn không bao giờ rẻ hơn mức này

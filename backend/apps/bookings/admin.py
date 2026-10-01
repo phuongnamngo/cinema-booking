@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Booking, BookingSeat
+from .models import Booking, BookingSeat, BookingCombo
 
 
 class BookingSeatInline(admin.TabularInline):
@@ -8,6 +8,16 @@ class BookingSeatInline(admin.TabularInline):
     extra = 0
     can_delete = False
     readonly_fields = ("showtime", "seat", "price", "is_active")
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+class BookingComboInline(admin.TabularInline):
+    model = BookingCombo
+    extra = 0
+    can_delete = False
+    readonly_fields = ("combo", "quantity", "unit_price")
 
     def has_add_permission(self, request, obj=None):
         return False
@@ -37,5 +47,7 @@ class BookingAdmin(admin.ModelAdmin):
         "expires_at",
         "checked_in_at",
         "checked_in_by",
+        "voucher",
+        "discount_amount",
     )
-    inlines = [BookingSeatInline]
+    inlines = [BookingSeatInline, BookingComboInline]

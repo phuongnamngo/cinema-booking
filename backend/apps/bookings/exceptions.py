@@ -50,3 +50,12 @@ class TicketRejected(APIException):
         self.message = message
         # Lưu ý: DRF ép mọi giá trị trong detail thành chuỗi, nên không đưa None vào đây
         super().__init__({"detail": message, "reason": reason, **extra})
+
+
+class PaymentInProgress(APIException):
+    status_code = status.HTTP_409_CONFLICT
+    default_detail = (
+        "Đơn đang có giao dịch chờ thanh toán nên không thể thay đổi. "
+        "Hãy hoàn tất thanh toán hoặc thử lại sau."
+    )
+    default_code = "payment_in_progress"

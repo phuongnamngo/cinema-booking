@@ -29,6 +29,7 @@ urlpatterns = [
     path("api/v1/", include("apps.bookings.urls")),
     path("api/v1/", include("apps.payments.urls")),
     path("api/v1/", include("apps.reports.urls")),
+    path("api/v1/", include("apps.promotions.urls")),
     path("mock-gateway/<str:txn_ref>/", MockGatewayView.as_view(), name="mock-gateway"),
     path("api/schema/", SpectacularAPIView.as_view(), name="schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="schema"), name="docs"),

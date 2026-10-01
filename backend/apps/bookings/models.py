@@ -32,6 +32,16 @@ class Booking(models.Model):
         max_length=20, choices=Status.choices, default=Status.PENDING
     )
     total_amount = models.PositiveIntegerField(default=0)  # VND
+    voucher = models.ForeignKey(
+        "promotions.Voucher",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,  # voucher đã dùng thì không xóa được, chỉ tắt is_active
+        related_name="bookings",
+    )
+    discount_amount = models.PositiveIntegerField(
+        default=0
+    )  # VND, chốt tại thời điểm áp mã
     expires_at = models.DateTimeField()
     checked_in_at = models.DateTimeField(null=True, blank=True)
     checked_in_by = models.ForeignKey(
@@ -93,3 +103,31 @@ class BookingSeat(models.Model):
 
     def __str__(self):
         return f"{self.booking_id}:{self.seat_id}"
+
+
+class BookingCombo(models.Model):
+    booking = models.ForeignKey(
+        Booking, on_delete=models.CASCADE, related_name="combo_lines"
+    )
+    combo = models.ForeignKey(
+        "promotions.Combo", on_delete=models.PROTECT, related_name="+"
+    )
+    quantity = models.PositiveSmallIntegerField()
+    unit_price = models.PositiveIntegerField()  # giá chốt tại thời điểm chọn
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["booking", "combo"], name="uniq_combo_per_booking"
+            ),
+            models.CheckConstraint(
+                condition=Q(quantity__gte=1), name="booking_combo_quantity_positive"
+            ),
+        ]
+
+    @property
+    def line_total(self):
+        return self.unit_price * self.quantity
+
+    def __str__(self):
+        return f"{self.booking_id}:{self.combo_id}x{self.quantity}"
