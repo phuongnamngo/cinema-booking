@@ -45,3 +45,12 @@ export function Spinner() {
 export function NotFound() {
   return <p className="py-16 text-center text-slate-400">Không tìm thấy trang hoặc dữ liệu này.</p>;
 }
+
+export function Forbidden() {
+  return (
+    <div className="py-16 text-center">
+      <p className="text-lg font-semibold">Bạn không có quyền truy cập trang này.</p>
+      <p className="mt-1 text-sm text-slate-400">Hãy đăng nhập bằng tài khoản phù hợp.</p>
+    </div>
+  );
+}

@@ -19,6 +19,7 @@ export interface User {
   last_name: string;
   phone: string;
   role: Role;
+  cinema: number | null;
   date_joined: string;
 }
 
@@ -106,4 +107,59 @@ export interface Payment {
   status: "pending" | "succeeded" | "failed" | "needs_review";
   payment_url: string | null;
   expires_at: string;
+}
+
+export type RejectReason =
+  | "not_confirmed"
+  | "already_checked_in"
+  | "showtime_cancelled"
+  | "too_early"
+  | "too_late";
+
+export interface Ticket {
+  code: string;
+  status: BookingStatus;
+  movie_title: string;
+  cinema_name: string;
+  room_name: string;
+  start_time: string;
+  end_time: string;
+  seats: BookingSeat[];
+  customer: string;
+  checked_in_at: string | null;
+  checked_in_by: string | null;
+}
+
+export interface TicketLookup {
+  ticket: Ticket;
+  can_check_in: boolean;
+  reason: RejectReason | null;
+  message: string | null;
+}
+
+export interface DateRange { date_from: string; date_to: string }
+
+export interface RevenuePoint { date: string; revenue: number; orders: number }
+export interface RevenueReport extends DateRange {
+  total_revenue: number;
+  total_orders: number;
+  days: RevenuePoint[];
+}
+
+export interface TopMovie { movie_id: number; title: string; tickets: number; revenue: number }
+export interface TopMoviesReport extends DateRange { movies: TopMovie[] }
+
+export interface OccupancyRow {
+  showtime_id: number;
+  movie_title: string;
+  cinema_name: string;
+  room_name: string;
+  start_time: string;
+  seats_total: number;
+  seats_sold: number;
+  occupancy: number; // 0..1
+}
+export interface OccupancyReport extends DateRange {
+  overall_occupancy: number;
+  showtimes: OccupancyRow[];
 }

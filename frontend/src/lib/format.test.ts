@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatTime, formatVnd, toDateParam, formatCountdown, formatDateTime } from "./format";
+import { formatTime, formatVnd, toDateParam, formatCountdown, formatDateTime, formatPercent } from "./format";
 
 describe("format", () => {
     it("toDateParam dùng ngày theo giờ máy, không lệch sang UTC", () => {
@@ -26,5 +26,9 @@ describe("format", () => {
         const text = formatDateTime("2026-10-05T12:30:00Z");
         expect(text).toContain("19:30");
         expect(text).toContain("05/10/2026");
+    });
+    it("formatPercent", () => {
+        expect(formatPercent(0.5)).toMatch(/^50\s?%$/);
+        expect(formatPercent(0.6249)).toMatch(/^62\s?%$/);
     });
 });

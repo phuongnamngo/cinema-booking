@@ -26,6 +26,16 @@ export function Layout() {
                 <Link to="/bookings" className="text-slate-300 hover:text-white">
                   Vé của tôi
                 </Link>
+                {(user.role === "staff" || user.role === "admin") && (
+                  <Link to="/staff/checkin" className="text-slate-300 hover:text-white">
+                    Soát vé
+                  </Link>
+                )}
+                {user.role === "admin" && (
+                  <Link to="/dashboard" className="text-slate-300 hover:text-white">
+                    Báo cáo
+                  </Link>
+                )}
                 <Link to="/account" className="text-slate-300 hover:text-white">
                   {user.first_name || user.username}
                 </Link>

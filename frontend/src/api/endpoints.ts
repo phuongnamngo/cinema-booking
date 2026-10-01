@@ -1,7 +1,8 @@
 import { apiBlob, apiFetch } from "./client";
 import type {
-  Booking, BookingStatus, Genre, Movie, MovieStatus, Page, Payment,
-  RegisterInput, Showtime, ShowtimeSeat, TokenPair, User,
+  Booking, BookingStatus, DateRange, Genre, Movie, MovieStatus, OccupancyReport, Page,
+  Payment, RegisterInput, RevenueReport, Showtime, ShowtimeSeat, Ticket, TicketLookup,
+  TokenPair, TopMoviesReport, User,
 } from "./types";
 
 export type MovieFilters = {
@@ -57,4 +58,22 @@ export const bookingsApi = {
   /** QR cần token nên không dùng thẳng <img src>: tải bằng fetch rồi nhúng dạng data URL */
   qr: async (code: string, signal?: AbortSignal) =>
     (await apiBlob(`/bookings/${code}/qr/`, { signal })).text(),
+};
+
+export const staffApi = {
+  // Chỉ đọc: cho biết vé có check-in được không và vì sao không
+  lookup: (code: string, signal?: AbortSignal) =>
+    apiFetch<TicketLookup>(`/staff/tickets/${encodeURIComponent(code)}/`, { signal }),
+  // Ghi: đánh dấu khách đã vào rạp. Quét lần hai trả 409 (ApiError có reason)
+  checkIn: (code: string) =>
+    apiFetch<Ticket>("/staff/checkin/", { method: "POST", body: { code } }),
+};
+
+export const reportsApi = {
+  revenue: (range: DateRange, signal?: AbortSignal) =>
+    apiFetch<RevenueReport>("/reports/revenue/", { params: { ...range }, signal }),
+  topMovies: (range: DateRange, limit = 5, signal?: AbortSignal) =>
+    apiFetch<TopMoviesReport>("/reports/top-movies/", { params: { ...range, limit }, signal }),
+  occupancy: (range: DateRange, signal?: AbortSignal) =>
+    apiFetch<OccupancyReport>("/reports/occupancy/", { params: { ...range }, signal }),
 };
