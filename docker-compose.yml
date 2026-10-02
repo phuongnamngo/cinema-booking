@@ -10,7 +10,7 @@ x-backend: &backend
     db:
       condition: service_healthy
     redis:
-      condition: service_started
+      condition: service_healthy
 services:
   db:
     image: postgres:16
@@ -36,6 +36,12 @@ services:
     command: python manage.py runserver 0.0.0.0:8000
     ports:
       - "8000:8000"
+    healthcheck:   # liveness thôi: DB/Redis sập thì khởi động lại backend không giúp gì
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
   
   worker:
     <<: *backend

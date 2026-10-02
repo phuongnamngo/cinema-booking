@@ -14,8 +14,12 @@ import environ
 from pathlib import Path
 from datetime import timedelta
 from celery.schedules import crontab
+import sys
+from django.core.exceptions import ImproperlyConfigured
 
 env = environ.Env(DJANGO_DEBUG=(bool, False))
+
+TESTING = "test" in sys.argv  # đang chạy `manage.py test ...`
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,6 +36,19 @@ DEBUG = env("DJANGO_DEBUG")
 
 ALLOWED_HOSTS = ["*"] if DEBUG else env.list("ALLOWED_HOSTS", default=[])
 
+if (
+    not DEBUG
+    and not TESTING
+    and (len(SECRET_KEY) < 50 or SECRET_KEY.startswith(("django-insecure", "dev-")))
+):
+    # Fail-fast: lỗi cấu hình phải nổ lúc khởi động, không phải lúc đang chạy thật
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY quá yếu cho production (cần >= 50 ký tự, không phải key mẫu)."
+    )
+
+ENABLE_API_DOCS = env.bool(
+    "ENABLE_API_DOCS", default=DEBUG
+)  # Swagger/schema chỉ bật ở dev
 
 # Application definition
 
@@ -57,9 +74,11 @@ INSTALLED_APPS = [
     "apps.payments",
     "apps.reports",
     "apps.promotions",
+    "apps.core",
 ]
 
 MIDDLEWARE = [
+    "apps.core.middleware.RequestContextMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -93,9 +112,26 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    "default": env.db("DATABASE_URL"),
-}
+DATABASES = {"default": env.db("DATABASE_URL")}
+DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=0)  # prod: 60
+DATABASES["default"][
+    "CONN_HEALTH_CHECKS"
+] = True  # kiểm tra kết nối cũ còn sống trước khi dùng lại
+DATABASES["default"].setdefault("OPTIONS", {})["connect_timeout"] = 5
+
+# Redis dùng 3 "ngăn": 0 = giữ ghế + channel layer, 1 = Celery broker, 2 = cache (throttling)
+if TESTING:
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": env("CACHE_URL", default="redis://redis:6379/2"),
+            "KEY_PREFIX": "cinema",
+            # Không có timeout thì Redis treo sẽ làm TỪNG request treo theo
+            "OPTIONS": {"socket_connect_timeout": 1, "socket_timeout": 1},
+        }
+    }
 
 
 # Password validation
@@ -146,6 +182,22 @@ AUTHENTICATION_BACKENDS = [
     "django.contrib.auth.backends.ModelBackend",
 ]
 
+NUM_PROXIES = env.int("NUM_PROXIES", default=0)
+
+THROTTLE_RATES = {
+    "anon": "240/min",
+    "user": "600/min",
+    "login": "10/min",
+    "register": "5/hour",
+    "voucher": "20/min",
+    "hold": "30/min",
+    "pay": "10/min",
+    "checkin": "120/min",
+}
+if TESTING:
+    # Test gửi rất nhiều request từ cùng một "IP": nới cực cao, riêng test throttling tự hạ từng scope
+    THROTTLE_RATES = {scope: "1000000/min" for scope in THROTTLE_RATES}
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -160,7 +212,20 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 12,
+    "DEFAULT_THROTTLE_CLASSES": (
+        "apps.core.throttling.AnonThrottle",
+        "apps.core.throttling.UserThrottle",
+        "apps.core.throttling.ScopedThrottle",
+    ),
+    "DEFAULT_THROTTLE_RATES": THROTTLE_RATES,
+    "NUM_PROXIES": NUM_PROXIES,
+    "EXCEPTION_HANDLER": "apps.core.exceptions.api_exception_handler",
 }
+if not DEBUG:
+    # Production chỉ trả JSON: không có giao diện Browsable API
+    REST_FRAMEWORK["DEFAULT_RENDERER_CLASSES"] = (
+        "rest_framework.renderers.JSONRenderer",
+    )
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=15),
@@ -176,7 +241,9 @@ SPECTACULAR_SETTINGS = {
     "SERVE_INCLUDE_SCHEMA": False,
 }
 
-CORS_ALLOWED_ORIGINS = ["http://localhost:5173"]
+CORS_ALLOWED_ORIGINS = env.list(
+    "CORS_ALLOWED_ORIGINS", default=["http://localhost:5173"]
+)
 
 REDIS_URL = env("REDIS_URL")
 SEAT_HOLD_SECONDS = env.int("SEAT_HOLD_SECONDS", default=600)  # 10 phút
@@ -235,4 +302,67 @@ PAYMENT_MIN_SECONDS_TO_PAY = (
 CHECKIN_OPENS_BEFORE_MINUTES = env.int("CHECKIN_OPENS_BEFORE_MINUTES", default=60)
 
 # --- Promotions ---
-MIN_PAYABLE_AMOUNT = env.int("MIN_PAYABLE_AMOUNT", default=1000)   # đơn không bao giờ rẻ hơn mức này
+MIN_PAYABLE_AMOUNT = env.int(
+    "MIN_PAYABLE_AMOUNT", default=1000
+)  # đơn không bao giờ rẻ hơn mức này
+
+# --- Bảo mật ---
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+SECURE_REFERRER_POLICY = "same-origin"
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS", default=[]
+)  # Django Admin qua HTTPS cần
+
+if not DEBUG:
+    # Django nằm sau Nginx (nơi kết thúc TLS). CHỈ an toàn khi Nginx luôn GHI ĐÈ header này
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    # HSTS không rút lại được: bắt đầu 3600, ổn rồi mới tăng dần lên 1 năm
+    SECURE_HSTS_SECONDS = env.int("HSTS_SECONDS", default=0)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("HSTS_INCLUDE_SUBDOMAINS", default=False)
+    # Chuyển hướng HTTP->HTTPS do Nginx làm (health check nội bộ đi bằng HTTP, Django mà chuyển hướng là hỏng)
+    SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=False)
+    if not SECURE_SSL_REDIRECT:
+        SILENCED_SYSTEM_CHECKS = ["security.W008"]
+
+LOG_LEVEL = env("LOG_LEVEL", default="WARNING" if TESTING else "INFO")
+LOG_FORMAT = env("LOG_FORMAT", default="text" if DEBUG else "json")   # "text" | "json"
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "filters": {"request_id": {"()": "apps.core.logs.RequestIdFilter"}},
+    "formatters": {
+        "text": {"format": "%(asctime)s %(levelname)-7s [%(request_id)s] %(name)s: %(message)s"},
+        "json": {"()": "apps.core.logs.JsonFormatter"},
+    },
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "filters": ["request_id"],   # gắn ở HANDLER để bắt được record từ mọi logger
+            "formatter": LOG_FORMAT,
+        },
+        "null": {"class": "logging.NullHandler"},
+    },
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {
+        "apps": {"level": LOG_LEVEL},
+        "django": {"handlers": ["console"], "level": "INFO", "propagate": False},
+        "django.request": {"level": "ERROR"},   # 4xx đã có trong access log
+        "django.security.DisallowedHost": {"handlers": ["null"], "propagate": False},
+    },
+}
+
+SENTRY_DSN = env("SENTRY_DSN", default="")
+if SENTRY_DSN:
+    from apps.core.sentry import init_sentry
+
+    init_sentry(
+        dsn=SENTRY_DSN,
+        environment=env("SENTRY_ENVIRONMENT", default="development" if DEBUG else "production"),
+        release=env("APP_VERSION", default=None),
+        traces_sample_rate=env.float("SENTRY_TRACES_SAMPLE_RATE", default=0.0),
+    )

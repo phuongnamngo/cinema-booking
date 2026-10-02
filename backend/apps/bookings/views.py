@@ -27,6 +27,7 @@ from . import checkout
 
 
 class HoldSeatsView(APIView):
+    throttle_scope = "hold"
     """POST /showtimes/{id}/hold/ - giữ ghế. Đặt ở app bookings (không phải @action của
     ShowtimeViewSet) vì customer cần quyền ghi, còn ShowtimeViewSet chỉ cho admin ghi.
     """
@@ -53,6 +54,7 @@ class HoldSeatsView(APIView):
 class BookingViewSet(
     mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet
 ):
+    throttle_scope = None
     """Đơn đặt vé của chính người dùng đang đăng nhập."""
 
     serializer_class = BookingSerializer
@@ -102,7 +104,7 @@ class BookingViewSet(
         return self._respond(booking)
 
     @extend_schema(request=ApplyVoucherSerializer, responses=BookingSerializer)
-    @action(detail=True, methods=["put", "delete"])
+    @action(detail=True, methods=["put", "delete"], throttle_scope="voucher")
     def voucher(self, request, code=None):
         """PUT: áp mã giảm giá (đổi mã nếu đã có). DELETE: gỡ mã."""
         booking = self.get_object()

@@ -24,6 +24,7 @@ from .serializers import PaymentSerializer
 
 
 class CreatePaymentView(APIView):
+    throttle_scope = "pay"
     """POST /bookings/{code}/pay/ - bắt đầu thanh toán cho đơn đang giữ ghế."""
 
     @extend_schema(request=None, responses={200: PaymentSerializer, 201: PaymentSerializer})
@@ -42,6 +43,7 @@ class MockWebhookView(APIView):
 
     authentication_classes = []           # không dùng JWT: danh tính được chứng minh bằng chữ ký
     permission_classes = [AllowAny]
+    throttle_classes = []
 
     def post(self, request):
         try:

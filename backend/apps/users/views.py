@@ -12,6 +12,7 @@ from .tasks import send_welcome_email
 
 # Create your views here.
 class RegisterView(generics.CreateAPIView):
+    throttle_scope = "register"
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
 
@@ -22,6 +23,7 @@ class RegisterView(generics.CreateAPIView):
 
 
 class LoginView(TokenObtainPairView):
+    throttle_scope = "login"
     serializer_class = CinemaTokenObtainPairSerializer
 
 

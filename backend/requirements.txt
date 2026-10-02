@@ -12,3 +12,4 @@ channels[daphne]>=4.2
 channels-redis>=4.2
 celery[redis]>=5.5
 qrcode>=8.0
+sentry-sdk[django]>=2.20

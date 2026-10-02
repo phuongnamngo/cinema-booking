@@ -32,6 +32,7 @@ class CheckInView(APIView):
     """POST /staff/checkin/ {"code": "..."} - xác nhận khách vào rạp."""
 
     permission_classes = [IsStaffOrAdmin]
+    throttle_scope = "checkin"
 
     @extend_schema(request=CheckInSerializer, responses=TicketSerializer)
     def post(self, request):
