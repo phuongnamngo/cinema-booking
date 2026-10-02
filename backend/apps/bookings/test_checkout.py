@@ -415,6 +415,14 @@ class CheckoutPaymentTests(PaymentFlowMixin, APITestCase):
             1,
         )
 
+    def test_booking_reports_has_pending_payment(self):
+        booking = self.booking
+        before = self.client.get(reverse("booking-detail", kwargs={"code": booking.code}))
+        self.assertFalse(before.data["has_pending_payment"])
+        self.start_payment()
+        after = self.client.get(reverse("booking-detail", kwargs={"code": booking.code}))
+        self.assertTrue(after.data["has_pending_payment"])
+
     def test_booking_is_locked_while_a_payment_is_waiting(self):
         self.checkout()
         self.start_payment()

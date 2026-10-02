@@ -6,7 +6,7 @@ from .models import Booking, BookingSeat
 def bookings_with_details():
     return Booking.objects.select_related(
         "voucher", "showtime__movie", "showtime__room__cinema"
-    ).prefetch_related("items__seat", "combo_lines__combo")
+    ).prefetch_related("items__seat", "combo_lines__combo", "payments")
 
 
 def get_seat_states(showtime, user=None):

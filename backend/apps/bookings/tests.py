@@ -15,6 +15,8 @@ from apps.cinemas.models import Cinema, Room, Seat
 from apps.cinemas.services import generate_seats
 from apps.movies.models import Movie
 from apps.showtimes.models import Showtime
+from apps.payments.models import Payment
+from apps.payments.services import create_payment
 from apps.users.models import User
 
 from .holds import get_redis, hold_key
@@ -113,6 +115,26 @@ class BookingApiTests(APITestCase):
         self.assertFalse(get_redis().exists(self.key(self.a1)))
         self.assertFalse(BookingSeat.objects.filter(is_active=True).exists())
         self.assertEqual(self.hold(self.bob, self.a1).status_code, 201)
+
+    def test_cancel_booking_cancels_its_pending_payment(self):
+        code = self.hold(self.alice, self.a1).data["code"]
+        booking = Booking.objects.get(code=code)
+        payment, _ = create_payment(booking)
+        self.client.force_authenticate(self.alice)
+        with self.captureOnCommitCallbacks(execute=True):
+            res = self.client.post(reverse("booking-cancel", kwargs={"code": code}))
+        self.assertEqual(res.status_code, 200)
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.CANCELLED)
+
+    def test_expire_pending_booking_leaves_payment_pending(self):
+        code = self.hold(self.alice, self.a1).data["code"]
+        booking = Booking.objects.get(code=code)
+        payment, _ = create_payment(booking)
+        Booking.objects.filter(pk=booking.pk).update(expires_at=timezone.now() - timedelta(seconds=1))
+        services.expire_pending_bookings()
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.PENDING)
 
     def test_cannot_cancel_non_pending_booking(self):
         code = self.hold(self.alice, self.a1).data["code"]

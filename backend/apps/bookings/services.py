@@ -8,6 +8,7 @@ from redis.exceptions import RedisError
 from rest_framework.exceptions import ValidationError
 
 from apps.cinemas.models import Seat
+from apps.payments.models import Payment
 
 from collections import defaultdict
 from functools import partial
@@ -158,6 +159,11 @@ def hold_seats(*, user, showtime, seat_ids):
 
 @transaction.atomic
 def cancel_pending_booking(booking):
+    pending = list(
+        Payment.objects.select_for_update().filter(
+            booking_id=booking.pk, status=Payment.Status.PENDING
+        )
+    )
     booking = Booking.objects.select_for_update().get(pk=booking.pk)
     if booking.status != Booking.Status.PENDING:
         raise BookingNotPending()
@@ -165,6 +171,9 @@ def cancel_pending_booking(booking):
     booking.status = Booking.Status.CANCELLED
     booking.save(update_fields=["status", "updated_at"])
     booking.items.update(is_active=False)
+    for payment in pending:
+        payment.status = Payment.Status.CANCELLED
+        payment.save(update_fields=["status", "updated_at"])
 
     seat_ids = list(booking.items.order_by("seat_id").values_list("seat_id", flat=True))
     showtime_id, code = booking.showtime_id, booking.code

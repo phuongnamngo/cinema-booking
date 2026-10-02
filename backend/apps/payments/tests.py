@@ -106,6 +106,30 @@ class CreatePaymentTests(PaymentFlowMixin, APITestCase):
         self.client.force_authenticate(self.alice)
         self.assertEqual(self.client.post(self.pay_url(booking)).status_code, 400)
 
+    @override_settings(
+        PAYMENT_PROVIDER="vnpay",
+        VNPAY_TMN_CODE="TESTTMN",
+        VNPAY_HASH_SECRET="test-vnpay-secret",
+    )
+    def test_new_payment_uses_provider_from_settings(self):
+        booking = self.new_booking()
+        self.client.force_authenticate(self.alice)
+        res = self.client.post(self.pay_url(booking))
+        self.assertEqual(res.status_code, 201)
+        self.assertEqual(Payment.objects.get().provider, Payment.Provider.VNPAY)
+
+    def test_existing_pending_payment_is_reused_when_provider_setting_changes(self):
+        booking = self.new_booking()
+        with override_settings(PAYMENT_PROVIDER="mock"):
+            payment, created = services.create_payment(booking)
+        self.assertTrue(created)
+        self.assertEqual(payment.provider, Payment.Provider.MOCK)
+        with override_settings(PAYMENT_PROVIDER="vnpay"):
+            again, created = services.create_payment(booking)
+        self.assertFalse(created)
+        self.assertEqual(again.txn_ref, payment.txn_ref)
+        self.assertEqual(again.provider, Payment.Provider.MOCK)
+
 
 @override_settings(**TEST_SETTINGS)
 class WebhookTests(PaymentFlowMixin, APITestCase):
@@ -193,6 +217,38 @@ class WebhookTests(PaymentFlowMixin, APITestCase):
         self.assertEqual(self.payment.status, Payment.Status.NEEDS_REVIEW)
         self.assertIn("amount_mismatch", self.payment.failure_reason)
         self.assertEqual(self.booking.status, Booking.Status.PENDING)
+
+    def test_success_after_cancel_needs_review_and_sends_no_email(self):
+        Payment.objects.filter(pk=self.payment.pk).update(status=Payment.Status.CANCELLED)
+        with self.captureOnCommitCallbacks(execute=True):
+            res = self.send_webhook(self.payment)
+        self.assertEqual(res.data["status"], "needs_review")
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.failure_reason, "late_success_after_cancel")
+        self.booking.refresh_from_db()
+        self.assertEqual(self.booking.status, Booking.Status.PENDING)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_success_after_failure_needs_review(self):
+        Payment.objects.filter(pk=self.payment.pk).update(status=Payment.Status.FAILED)
+        res = self.send_webhook(self.payment)
+        self.assertEqual(res.data["status"], "needs_review")
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.failure_reason, "late_success_after_failure")
+
+    def test_failed_payload_after_cancel_is_duplicate(self):
+        Payment.objects.filter(pk=self.payment.pk).update(status=Payment.Status.CANCELLED)
+        res = self.send_webhook(self.payment, result="failed")
+        self.assertEqual(res.data["status"], "duplicate")
+
+    def test_second_success_on_needs_review_is_duplicate(self):
+        Payment.objects.filter(pk=self.payment.pk).update(
+            status=Payment.Status.NEEDS_REVIEW, failure_reason="late_success_after_cancel"
+        )
+        res = self.send_webhook(self.payment)
+        self.assertEqual(res.data["status"], "duplicate")
+        self.payment.refresh_from_db()
+        self.assertEqual(self.payment.failure_reason, "late_success_after_cancel")
 
     def test_payment_after_expiry_needs_review(self):
         Booking.objects.filter(pk=self.booking.pk).update(expires_at=timezone.now() - timedelta(seconds=1))
@@ -320,3 +376,22 @@ class ConcurrentWebhookTests(PaymentFlowMixin, TransactionTestCase):
         self.assertEqual(Payment.objects.filter(status=Payment.Status.SUCCEEDED).count(), 1)
         email.delay.assert_called_once_with(booking.id)
         broadcast.assert_called_once()
+
+
+@override_settings(**TEST_SETTINGS)
+class PaymentModelTests(PaymentFlowMixin, APITestCase):
+    def test_cancelled_status_and_review_fields_exist(self):
+        self.assertEqual(Payment.Status.CANCELLED, "cancelled")
+        for name in ("review_note", "reviewed_at", "reviewed_by"):
+            Payment._meta.get_field(name)
+        self.assertTrue(any(
+            index.name == "payment_reconcile_queue"
+            and index.fields == ["status", "provider", "created_at"]
+            for index in Payment._meta.indexes
+        ))
+        booking = self.new_booking()
+        payment = Payment.objects.create(
+            booking=booking, amount=booking.total_amount, status=Payment.Status.CANCELLED
+        )
+        self.assertEqual(payment.review_note, "")
+        self.assertIsNone(payment.reviewed_at)

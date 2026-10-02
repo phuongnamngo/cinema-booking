@@ -111,6 +111,7 @@ export interface Booking {
   start_time: string;
   seats: BookingSeat[];
   combos: BookingCombo[];
+  has_pending_payment: boolean;
   created_at: string;
 }
 
@@ -132,7 +133,7 @@ export interface Payment {
   txn_ref: string;
   booking_code: string;
   amount: number;
-  status: "pending" | "succeeded" | "failed" | "needs_review";
+  status: "pending" | "succeeded" | "failed" | "needs_review" | "cancelled";
   payment_url: string | null;
   expires_at: string;
 }

@@ -10,6 +10,7 @@ import { formatCountdown, formatDateTime } from "@/lib/format";
 import { useSecondsLeft } from "@/lib/useSecondsLeft";
 import { ComboPicker } from "./ComboPicker";
 import { isConflict } from "./errors";
+import { editsLockedByPendingPayment } from "./pendingPayment";
 import { PriceSummary } from "./PriceSummary";
 import { bookingKeys, useBooking } from "./queries";
 import { StatusBadge } from "./StatusBadge";
@@ -74,7 +75,16 @@ function BookingView({ booking, updatedAt }: { booking: Booking; updatedAt: numb
     },
   });
 
+  const cancelPayment = useMutation({
+    mutationFn: () => bookingsApi.cancelPayment(booking.code),
+    onSuccess: (updated) => {
+      queryClient.setQueryData(bookingKeys.detail(updated.code), updated);
+      void queryClient.invalidateQueries({ queryKey: bookingKeys.lists });
+    },
+  });
+
   const enoughTime = secondsLeft >= MIN_SECONDS_TO_PAY;
+  const paymentLocked = editsLockedByPendingPayment(booking.has_pending_payment);
   // 409 từ combo/voucher: đơn đã có giao dịch chờ (hoặc vừa hết hạn, khi đó trang sẽ tự đổi giao diện)
   const conflict = [combos.error, voucher.error].find(isConflict);
 
@@ -116,12 +126,16 @@ function BookingView({ booking, updatedAt }: { booking: Booking; updatedAt: numb
 
           <section className={`${styles.card} space-y-4`}>
             <h2 className="font-display text-xl font-semibold uppercase tracking-wide">🍿 Bắp nước</h2>
-            <ComboPicker editor={combos} lines={booking.combos} locked={voucher.isPending} />
+            <ComboPicker editor={combos} lines={booking.combos} locked={paymentLocked || voucher.isPending} />
           </section>
 
           <section className={`${styles.card} space-y-4`}>
             <h2 className="font-display text-xl font-semibold uppercase tracking-wide">🎟 Mã giảm giá</h2>
-            <VoucherBox booking={booking} actions={voucher} locked={combos.status !== "idle"} />
+            <VoucherBox
+              booking={booking}
+              actions={voucher}
+              locked={paymentLocked || combos.status !== "idle"}
+            />
           </section>
 
           <section className="space-y-4">
@@ -138,9 +152,9 @@ function BookingView({ booking, updatedAt }: { booking: Booking; updatedAt: numb
                 </button>
               </div>
             )}
-            {(pay.isError || cancel.isError) && (
+            {(pay.isError || cancel.isError || cancelPayment.isError) && (
               <p role="alert" className={styles.error}>
-                {(pay.error ?? cancel.error)?.message}
+                {(pay.error ?? cancel.error ?? cancelPayment.error)?.message}
               </p>
             )}
 
@@ -148,15 +162,32 @@ function BookingView({ booking, updatedAt }: { booking: Booking; updatedAt: numb
               type="button"
               className={`${styles.button} w-full py-4 text-base uppercase tracking-wider`}
               // Chưa lưu xong combo/voucher thì KHÔNG được thanh toán: giao dịch sẽ chốt tổng cũ
-              disabled={!enoughTime || editing || pay.isPending || pay.isSuccess || cancel.isPending}
+              disabled={
+                !enoughTime ||
+                editing ||
+                pay.isPending ||
+                pay.isSuccess ||
+                cancel.isPending ||
+                cancelPayment.isPending
+              }
               onClick={() => pay.mutate()}
             >
               {pay.isPending || pay.isSuccess ? "Đang chuyển đến cổng…" : "Thanh toán →"}
             </button>
+            {paymentLocked && (
+              <button
+                type="button"
+                className={`${styles.buttonGhost} w-full`}
+                disabled={pay.isPending || pay.isSuccess || cancelPayment.isPending}
+                onClick={() => cancelPayment.mutate()}
+              >
+                Hủy giao dịch
+              </button>
+            )}
             <button
               type="button"
               className="w-full py-2 text-sm text-muted transition hover:text-red-300 disabled:opacity-40"
-              disabled={pay.isPending || pay.isSuccess || cancel.isPending}
+              disabled={pay.isPending || pay.isSuccess || cancel.isPending || cancelPayment.isPending}
               onClick={() => {
                 if (window.confirm("Hủy đơn và trả ghế?")) cancel.mutate();
               }}

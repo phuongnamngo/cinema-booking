@@ -279,6 +279,11 @@ CELERY_BEAT_SCHEDULE = {
         "task": "users.flush_expired_tokens",
         "schedule": crontab(hour=3, minute=0),  # 3h sáng mỗi ngày
     },
+    "reconcile-pending-payments": {
+        "task": "payments.reconcile_pending",
+        "schedule": 60.0,
+        "options": {"expires": 60},
+    },
 }
 
 # --- Email (dev: Mailpit hứng thư, không gửi ra ngoài) ---
@@ -297,6 +302,20 @@ PAYMENT_MOCK_ENABLED = env.bool(
 PAYMENT_MIN_SECONDS_TO_PAY = (
     60  # đơn còn dưới ngần này thì không cho bắt đầu thanh toán
 )
+PAYMENT_PROVIDER = env("PAYMENT_PROVIDER", default="mock")
+VNPAY_TMN_CODE = env("VNPAY_TMN_CODE", default="")
+VNPAY_HASH_SECRET = env("VNPAY_HASH_SECRET", default="")
+VNPAY_PAY_URL = env(
+    "VNPAY_PAY_URL",
+    default="https://sandbox.vnpayment.vn/paymentv2/vpcpay.html",
+)
+VNPAY_QUERY_URL = env(
+    "VNPAY_QUERY_URL",
+    default="https://sandbox.vnpayment.vn/merchant_webapi/api/transaction",
+)
+VNPAY_RETURN_URL = env("VNPAY_RETURN_URL", default="http://localhost:5173")
+PAYMENT_IPN_IP_ALLOWLIST = env.list("PAYMENT_IPN_IP_ALLOWLIST", default=[])
+PAYMENT_RECONCILE_AFTER_SECONDS = env.int("PAYMENT_RECONCILE_AFTER_SECONDS", default=120)
 
 # --- Check-in ---
 CHECKIN_OPENS_BEFORE_MINUTES = env.int("CHECKIN_OPENS_BEFORE_MINUTES", default=60)

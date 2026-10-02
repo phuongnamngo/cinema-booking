@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import timedelta
 from functools import partial
 
 from django.conf import settings
@@ -13,7 +14,7 @@ from apps.bookings.services import confirm_booking
 from apps.bookings.tasks import send_booking_confirmation_email
 
 from . import gateways
-from .exceptions import InvalidPayload, InvalidSignature
+from .exceptions import InvalidPayload, InvalidSignature, NoPendingPayment
 from .models import Payment
 from .serializers import GatewayResultSerializer
 
@@ -54,9 +55,31 @@ def create_payment(booking):
         # Số tiền do SERVER quyết định (đã gồm combo và giảm giá). Unique constraint "một payment
         # pending mỗi đơn" vẫn là chốt chặn cuối ở DB
         return (
-            Payment.objects.create(booking=booking, amount=booking.total_amount),
+            Payment.objects.create(
+                booking=booking,
+                amount=booking.total_amount,
+                provider=settings.PAYMENT_PROVIDER,
+            ),
             True,
         )
+
+
+def cancel_pending_payment(booking):
+    """Hủy payment pending. Khóa payment trước booking. Không nhả ghế."""
+    with transaction.atomic():
+        payment = (
+            Payment.objects.select_for_update()
+            .filter(booking_id=booking.pk, status=Payment.Status.PENDING)
+            .first()
+        )
+        if payment is None:
+            raise NoPendingPayment()
+        booking = Booking.objects.select_for_update().get(pk=booking.pk)
+        if booking.status != Booking.Status.PENDING or booking.expires_at <= timezone.now():
+            raise BookingNotPending()
+        payment.status = Payment.Status.CANCELLED
+        payment.save(update_fields=["status", "updated_at"])
+        return payment
 
 
 def handle_webhook(raw_body: bytes, signature: str | None) -> str:
@@ -92,21 +115,36 @@ def _flag_for_review(payment, reason):
 
 
 @transaction.atomic
-def process_payment_result(*, txn_ref, gateway_txn_id, amount, success, payload):
+def process_payment_result(
+    *, txn_ref, gateway_txn_id, amount, success, payload, failure_reason=None
+):
     # Khóa CHỈ dòng payment. Webhook trùng lặp/song song sẽ xếp hàng ở đây
     payment = Payment.objects.select_for_update().filter(txn_ref=txn_ref).first()
     if payment is None:
         logger.warning("Webhook cho giao dịch không tồn tại: %s", txn_ref)
         return Outcome.IGNORED  # trả 200 để cổng ngừng gọi lại
+    if payment.status in (Payment.Status.SUCCEEDED, Payment.Status.NEEDS_REVIEW):
+        return Outcome.DUPLICATE
+    if payment.status in (Payment.Status.CANCELLED, Payment.Status.FAILED):
+        if success:
+            payment.gateway_txn_id = gateway_txn_id
+            payment.raw_payload = payload
+            reason = (
+                "late_success_after_cancel"
+                if payment.status == Payment.Status.CANCELLED
+                else "late_success_after_failure"
+            )
+            return _flag_for_review(payment, reason)
+        return Outcome.DUPLICATE
     if payment.status != Payment.Status.PENDING:
-        return Outcome.DUPLICATE  # đã xử lý rồi: idempotent
+        return Outcome.DUPLICATE
 
     payment.gateway_txn_id = gateway_txn_id
     payment.raw_payload = payload
 
     if not success:
         payment.status = Payment.Status.FAILED
-        payment.failure_reason = "declined_by_gateway"
+        payment.failure_reason = failure_reason or "declined_by_gateway"
         payment.save()
         return (
             Outcome.FAILED
@@ -138,3 +176,41 @@ def process_payment_result(*, txn_ref, gateway_txn_id, amount, success, payload)
         partial(send_booking_confirmation_email.delay, booking.id), robust=True
     )
     return Outcome.CONFIRMED
+
+
+def payments_due_for_reconcile(now=None):
+    now = now or timezone.now()
+    cutoff = now - timedelta(seconds=settings.PAYMENT_RECONCILE_AFTER_SECONDS)
+    return Payment.objects.filter(
+        provider=Payment.Provider.VNPAY,
+        status=Payment.Status.PENDING,
+        created_at__lt=cutoff,
+    )
+
+
+def apply_gateway_query(payment):
+    try:
+        snapshot = gateways.VNPayGateway.query(payment)
+    except gateways.GatewayUnavailable:
+        logger.exception("Đối soát %s không gọi được cổng", payment.txn_ref)
+        return None
+    payload = {"source": "querydr"}
+    if not snapshot.paid:
+        booking = Booking.objects.get(pk=payment.booking_id)
+        if booking.status == Booking.Status.PENDING and booking.expires_at > timezone.now():
+            return None
+        return process_payment_result(
+            txn_ref=payment.txn_ref,
+            gateway_txn_id=snapshot.gateway_txn_id,
+            amount=payment.amount,
+            success=False,
+            payload=payload,
+            failure_reason="not_paid_at_gateway",
+        )
+    return process_payment_result(
+        txn_ref=payment.txn_ref,
+        gateway_txn_id=snapshot.gateway_txn_id,
+        amount=snapshot.amount,
+        success=True,
+        payload={**payload, "amount": snapshot.amount},
+    )

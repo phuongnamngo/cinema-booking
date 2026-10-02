@@ -55,6 +55,8 @@ export const bookingsApi = {
   get: (code: string, signal?: AbortSignal) => apiFetch<Booking>(`/bookings/${code}/`, { signal }),
   cancel: (code: string) => apiFetch<Booking>(`/bookings/${code}/cancel/`, { method: "POST" }),
   pay: (code: string) => apiFetch<Payment>(`/bookings/${code}/pay/`, { method: "POST" }),
+  cancelPayment: (code: string) =>
+    apiFetch<Booking>(`/bookings/${code}/payments/cancel/`, { method: "POST" }),
   /** QR cần token nên không dùng thẳng <img src>: tải bằng fetch rồi nhúng dạng data URL */
   qr: async (code: string, signal?: AbortSignal) =>
     (await apiBlob(`/bookings/${code}/qr/`, { signal })).text(),

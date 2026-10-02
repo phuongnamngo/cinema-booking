@@ -3,6 +3,8 @@ from django.utils import timezone
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
+from apps.payments.models import Payment
+
 from .models import Booking, BookingSeat, BookingCombo
 
 
@@ -62,6 +64,7 @@ class BookingSerializer(serializers.ModelSerializer):
     seats_amount = serializers.SerializerMethodField()
     combos_amount = serializers.SerializerMethodField()
     voucher_code = serializers.SerializerMethodField()
+    has_pending_payment = serializers.SerializerMethodField()
 
     class Meta:
         model = Booking
@@ -69,7 +72,7 @@ class BookingSerializer(serializers.ModelSerializer):
             "id", "code", "status", "total_amount", "seats_amount", "combos_amount",
             "discount_amount", "voucher_code", "expires_at", "checked_in_at", "seconds_left",
             "showtime", "movie_title", "cinema_name", "room_name", "start_time",
-            "seats", "combos", "created_at",
+            "seats", "combos", "created_at", "has_pending_payment",
         )
         read_only_fields = fields
 
@@ -91,6 +94,12 @@ class BookingSerializer(serializers.ModelSerializer):
     @extend_schema_field(str)
     def get_voucher_code(self, booking):
         return booking.voucher.code if booking.voucher_id else None
+
+    @extend_schema_field(bool)
+    def get_has_pending_payment(self, booking):
+        return any(
+            payment.status == Payment.Status.PENDING for payment in booking.payments.all()
+        )
 
 
 class CheckInSerializer(serializers.Serializer):

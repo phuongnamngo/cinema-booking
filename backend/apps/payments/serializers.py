@@ -1,7 +1,7 @@
 from django.urls import reverse
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
-
+from .gateways import VNPayGateway, client_ip
 from .models import Payment
 
 
@@ -17,7 +17,12 @@ class PaymentSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(str)
     def get_payment_url(self, payment):
-        if payment.provider != Payment.Provider.MOCK or payment.status != Payment.Status.PENDING:
+        if payment.status != Payment.Status.PENDING:
+            return None
+        if payment.provider == Payment.Provider.VNPAY:
+            ip_addr = client_ip(self.context["request"])
+            return VNPayGateway.checkout_url(payment, ip_addr)
+        if payment.provider != Payment.Provider.MOCK:
             return None
         path = reverse("mock-gateway", args=[payment.txn_ref])
         return self.context["request"].build_absolute_uri(path)

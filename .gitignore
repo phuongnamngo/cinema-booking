@@ -90,4 +90,9 @@ playwright/.cache/
 Thumbs.db
 Desktop.ini
 
+#agent
 .codegraph
+.cursor/
+openspec
+
+booking_remaining_work.md

@@ -1,4 +1,5 @@
 import json
+import logging
 import secrets
 
 from django.conf import settings
@@ -15,12 +16,24 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.bookings.models import Booking
+from apps.bookings.selectors import bookings_with_details
+from apps.bookings.serializers import BookingSerializer
 from apps.bookings.services import expire_pending_bookings
 
 from . import gateways, services
 from .exceptions import InvalidPayload, InvalidSignature
 from .models import Payment
 from .serializers import PaymentSerializer
+
+logger = logging.getLogger(__name__)
+
+_IPN_MESSAGE = {
+    "00": "Confirm Success",
+    "01": "Order not found",
+    "02": "Order already confirmed",
+    "97": "Invalid signature",
+    "99": "Unknown error",
+}
 
 
 class CreatePaymentView(APIView):
@@ -35,6 +48,72 @@ class CreatePaymentView(APIView):
         payment, created = services.create_payment(booking)
         data = PaymentSerializer(payment, context={"request": request}).data
         return Response(data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
+class CancelPaymentView(APIView):
+    throttle_scope = "pay"
+    """POST /bookings/{code}/payments/cancel/ - hủy giao dịch chờ, giữ đơn và ghế."""
+
+    @extend_schema(request=None, responses=BookingSerializer)
+    def post(self, request, code):
+        expire_pending_bookings(user=request.user)
+        booking = get_object_or_404(Booking, code=code, user=request.user)
+        services.cancel_pending_payment(booking)
+        booking = bookings_with_details().get(pk=booking.pk)
+        return Response(BookingSerializer(booking).data)
+
+
+def _ipn_params(request):
+    source = request.POST if request.method == "POST" and request.POST else request.GET
+    return {key: value for key, value in source.items()}
+
+
+@extend_schema(exclude=True)
+class VNPayIPNView(APIView):
+    """IPN VNPay. GET và POST cùng một hàm vì sandbox gọi GET."""
+
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    throttle_classes = []
+
+    def get(self, request):
+        return self._handle(request)
+
+    def post(self, request):
+        return self._handle(request)
+
+    def _rsp(self, code):
+        return Response({"RspCode": code, "Message": _IPN_MESSAGE[code]})
+
+    def _handle(self, request):
+        allowlist = settings.PAYMENT_IPN_IP_ALLOWLIST
+        if allowlist and gateways.client_ip(request) not in allowlist:
+            return Response(status=status.HTTP_403_FORBIDDEN)
+        params = _ipn_params(request)
+        if not gateways.verify_vnpay(params, settings.VNPAY_HASH_SECRET):
+            return self._rsp("97")
+        try:
+            outcome = services.process_payment_result(
+                txn_ref=params["vnp_TxnRef"],
+                gateway_txn_id=params.get("vnp_TransactionNo", ""),
+                amount=int(params["vnp_Amount"]) // 100,
+                success=(
+                    params.get("vnp_ResponseCode") == "00"
+                    and params.get("vnp_TransactionStatus") == "00"
+                ),
+                payload=params,
+            )
+        except Exception:
+            logger.exception("IPN VNPay lỗi trước khi ghi nhận")
+            return self._rsp("99")
+        codes = {
+            services.Outcome.CONFIRMED: "00",
+            services.Outcome.FAILED: "00",
+            services.Outcome.NEEDS_REVIEW: "00",
+            services.Outcome.DUPLICATE: "02",
+            services.Outcome.IGNORED: "01",
+        }
+        return self._rsp(codes[outcome])
 
 
 @extend_schema(exclude=True)
