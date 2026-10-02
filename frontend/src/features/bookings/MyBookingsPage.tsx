@@ -44,6 +44,11 @@ export function MyBookingsPage() {
                   Ghế {b.seats.map((s) => s.label).join(", ")} · {formatVnd(b.total_amount)} ·{" "}
                   <span className="font-mono">{b.code}</span>
                 </p>
+                {b.combos.length > 0 && (
+                  <p className="text-sm text-slate-400">
+                    Combo: {b.combos.map((c) => `${c.quantity}× ${c.name}`).join(", ")}
+                  </p>
+                )}
               </Link>
             </li>
           ))}

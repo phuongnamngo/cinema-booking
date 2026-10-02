@@ -84,12 +84,25 @@ export interface BookingSeat {
   price: number;
 }
 
+export interface BookingCombo {
+  combo: number;
+  name: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+}
+
 export interface Booking {
   id: number;
   code: string;
   status: BookingStatus;
-  total_amount: number;
+  total_amount: number; // số tiền phải trả, do server tính
+  seats_amount: number;
+  combos_amount: number;
+  discount_amount: number;
+  voucher_code: string | null;
   expires_at: string;
+  checked_in_at: string | null;
   seconds_left: number;
   showtime: number;
   movie_title: string;
@@ -97,7 +110,22 @@ export interface Booking {
   room_name: string;
   start_time: string;
   seats: BookingSeat[];
+  combos: BookingCombo[];
   created_at: string;
+}
+
+export interface Combo {
+  id: number;
+  name: string;
+  description: string;
+  price: number;
+  is_active: boolean;
+  sort_order: number;
+}
+
+export interface ComboItem {
+  combo: number;
+  quantity: number;
 }
 
 export interface Payment {

@@ -2,7 +2,7 @@ import { apiBlob, apiFetch } from "./client";
 import type {
   Booking, BookingStatus, DateRange, Genre, Movie, MovieStatus, OccupancyReport, Page,
   Payment, RegisterInput, RevenueReport, Showtime, ShowtimeSeat, Ticket, TicketLookup,
-  TokenPair, TopMoviesReport, User,
+  TokenPair, TopMoviesReport, User, Combo, ComboItem
 } from "./types";
 
 export type MovieFilters = {
@@ -58,6 +58,18 @@ export const bookingsApi = {
   /** QR cần token nên không dùng thẳng <img src>: tải bằng fetch rồi nhúng dạng data URL */
   qr: async (code: string, signal?: AbortSignal) =>
     (await apiBlob(`/bookings/${code}/qr/`, { signal })).text(),
+  // PUT = "đặt lại toàn bộ": gửi lại hay đến trễ đều vô hại, request cuối thắng
+  setCombos: (code: string, items: ComboItem[]) =>
+    apiFetch<Booking>(`/bookings/${code}/combos/`, { method: "PUT", body: { items } }),
+  applyVoucher: (code: string, voucherCode: string) =>
+    apiFetch<Booking>(`/bookings/${code}/voucher/`, { method: "PUT", body: { code: voucherCode } }),
+  removeVoucher: (code: string) =>
+    apiFetch<Booking>(`/bookings/${code}/voucher/`, { method: "DELETE" }),
+};
+
+export const combosApi = {
+  // Endpoint này không phân trang: trả thẳng một mảng
+  list: (signal?: AbortSignal) => apiFetch<Combo[]>("/combos/", { signal }),
 };
 
 export const staffApi = {
