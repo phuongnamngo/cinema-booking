@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Link, Navigate, useLocation } from "react-router";
 import { ApiError } from "@/api/client";
 import { useAuth } from "@/auth/store";
+import { AuthShell } from "@/components/AuthShell";
 import { styles } from "@/components/styles";
 import { Field } from "@/components/ui";
 
@@ -26,8 +27,7 @@ export function LoginPage() {
       : error?.message;
 
   return (
-    <div className={`${styles.card} mx-auto max-w-md`}>
-      <h1 className="mb-6 text-xl font-bold">Đăng nhập</h1>
+    <AuthShell title="Đăng nhập" tagline="Mỗi suất chiếu, một câu chuyện.">
       <form
         className="space-y-4"
         onSubmit={(e) => {
@@ -53,20 +53,20 @@ export function LoginPage() {
           required
         />
         {message && (
-          <p role="alert" className={styles.error}>
+          <p role="alert" className={`${styles.error} animate-shake`}>
             {message}
           </p>
         )}
-        <button type="submit" disabled={mutation.isPending} className={`${styles.button} w-full`}>
+        <button type="submit" disabled={mutation.isPending} className={`${styles.button} w-full py-3`}>
           {mutation.isPending ? "Đang đăng nhập…" : "Đăng nhập"}
         </button>
       </form>
-      <p className="mt-4 text-center text-sm text-slate-400">
+      <p className="text-center text-sm text-muted">
         Chưa có tài khoản?{" "}
-        <Link to="/register" state={location.state} className="text-red-400 hover:underline">
+        <Link to="/register" state={location.state} className="font-semibold text-brand-hover hover:underline">
           Đăng ký
         </Link>
       </p>
-    </div>
+    </AuthShell>
   );
 }

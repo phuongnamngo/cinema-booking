@@ -27,16 +27,22 @@ export function VoucherBox({ booking, actions, locked }: VoucherBoxProps) {
   return (
     <div className="space-y-3">
       {booking.voucher_code && (
-        <div className="flex items-center justify-between rounded-md border border-green-800 bg-green-950 px-3 py-2 text-sm">
-          <span>
-            <span className="font-mono font-semibold">{booking.voucher_code}</span> · giảm{" "}
-            {formatVnd(booking.discount_amount)}
+        <div className="ticket-notch flex animate-fade-up items-center justify-between gap-3 rounded-xl border border-dashed border-green-500/50 bg-green-950/40 px-5 py-3 text-sm">
+          <span className="flex items-center gap-3">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-green-500/15 font-bold text-green-300" aria-hidden>
+              %
+            </span>
+            <span>
+              <span className="font-mono font-semibold tracking-wider text-green-300">{booking.voucher_code}</span>
+              <span className="text-muted"> · giảm </span>
+              <span className="font-mono">{formatVnd(booking.discount_amount)}</span>
+            </span>
           </span>
           <button
             type="button"
             disabled={busy}
             onClick={() => actions.mutate({ kind: "remove" })}
-            className="text-green-300 underline disabled:opacity-50"
+            className="text-xs font-semibold text-green-300 underline-offset-2 hover:underline disabled:opacity-50"
           >
             Gỡ
           </button>
@@ -55,14 +61,14 @@ export function VoucherBox({ booking, actions, locked }: VoucherBoxProps) {
           maxLength={32}
           autoCapitalize="characters"
           autoComplete="off"
-          className={`${styles.input} font-mono uppercase`}
+          className={`${styles.input} font-mono uppercase tracking-wider`}
         />
         <button type="submit" disabled={busy || !input.trim()} className={styles.buttonGhost}>
           {actions.isPending ? "Đang áp…" : "Áp dụng"}
         </button>
       </form>
       {error && (
-        <p role="alert" className="text-sm text-red-400">
+        <p role="alert" className="animate-shake text-sm text-red-400">
           {error.message}
         </p>
       )}

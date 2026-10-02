@@ -1,114 +1,211 @@
 @import "tailwindcss";
 
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+/* Cinema Noir — token theo .stitch/DESIGN.md */
+@theme {
+  --color-ink: #0a0a0f;
+  --color-surface: #14141c;
+  --color-field: #0f0f16;
+  --color-smoke: #26263a;
+  --color-brand: #e11d48;
+  --color-brand-hover: #f43f5e;
+  --color-gold: #f5c451;
+  --color-sweet: #ec4899;
+  --color-hold: #38bdf8;
+  --color-muted: #a1a1aa;
+  --color-dim: #71717a;
+  --color-fg: #f4f4f5;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  /* Oswald thay Bebas Neue: Bebas không có dấu tiếng Việt */
+  --font-display: "Oswald", "Be Vietnam Pro", sans-serif;
+  --font-sans: "Be Vietnam Pro", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  --shadow-glow: 0 0 24px rgba(225, 29, 72, 0.45);
+  --shadow-glow-sm: 0 0 14px rgba(225, 29, 72, 0.35);
+  --shadow-lift: 0 12px 30px -6px rgba(0, 0, 0, 0.9), 0 0 20px rgba(225, 29, 72, 0.3);
 
-  @media (max-width: 1024px) {
-    font-size: 16px;
+  --ease-cinema: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-fade-up: fade-up 0.55s var(--ease-cinema) both;
+  --animate-fade-in: fade-in 0.4s ease-out both;
+  --animate-kenburns: kenburns 18s ease-in-out infinite alternate;
+  --animate-seat-pop: seat-pop 0.35s var(--ease-cinema);
+  --animate-breathe: breathe 2.4s ease-in-out infinite;
+  --animate-shake: shake 0.45s ease-in-out;
+  --animate-laser: laser 2.4s ease-in-out infinite alternate;
+  --animate-flicker: flicker 4s linear infinite;
+  --animate-qr-sweep: qr-sweep 2.6s ease-in-out infinite;
+  --animate-ticket-in: ticket-in 0.8s var(--ease-cinema) both;
+  --animate-grow-up: grow-up 0.7s var(--ease-cinema) both;
+  --animate-grow-x: grow-x 0.9s var(--ease-cinema) both;
+  --animate-success-pulse: success-pulse 1.2s ease-out;
+  --animate-spin-slow: spin 6s linear infinite;
+  --animate-draw: draw 0.6s 0.15s ease-out both;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes kenburns {
+  from { transform: scale(1.02); }
+  to { transform: scale(1.12); }
+}
+@keyframes seat-pop {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.22); }
+  100% { transform: scale(1); }
+}
+@keyframes breathe {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 0.8; }
+}
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+@keyframes laser {
+  from { top: 8%; }
+  to { top: 90%; }
+}
+@keyframes flicker {
+  0%, 18%, 22%, 25%, 53%, 57%, 100% {
+    opacity: 1;
+    text-shadow: 0 0 12px rgba(225, 29, 72, 0.9), 0 0 40px rgba(225, 29, 72, 0.6), 0 0 80px rgba(225, 29, 72, 0.4);
+  }
+  20%, 24%, 55% { opacity: 0.35; text-shadow: none; }
+}
+@keyframes qr-sweep {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+@keyframes ticket-in {
+  from { opacity: 0; transform: perspective(900px) translateY(40px) rotateX(18deg); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes grow-up {
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+}
+@keyframes grow-x {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+@keyframes success-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55); }
+  100% { box-shadow: 0 0 0 22px rgba(34, 197, 94, 0); }
+}
+@keyframes draw {
+  from { stroke-dashoffset: 48; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes shimmer {
+  from { transform: translateX(-150%); }
+  to { transform: translateX(150%); }
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--color-ink);
+  }
+  body {
+    margin: 0;
+    min-height: 100svh;
+    background-color: var(--color-ink);
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -10%, rgba(225, 29, 72, 0.16), transparent 70%),
+      radial-gradient(rgba(225, 29, 72, 0.06) 1px, transparent 0);
+    background-size: 100% 100%, 24px 24px;
+    background-attachment: fixed;
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection {
+    background: rgba(225, 29, 72, 0.4);
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+@layer components {
+  /* Vệt sáng lướt qua nút chính */
+  .shimmer {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+    transform: translateX(-150%);
+  }
+  .shimmer:hover:not(:disabled)::after {
+    animation: shimmer 0.9s ease-out;
   }
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
+  /* Skeleton có vệt shimmer thay vì nhấp nháy */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background: var(--color-surface);
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.06), transparent);
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+
+  /* Con trực tiếp xuất hiện lần lượt; đặt --i trên từng con nếu muốn tự chỉnh */
+  .stagger > * {
+    animation: var(--animate-fade-up);
+    animation-delay: calc(var(--i, 0) * 60ms);
+  }
+
+  /* Khía bán nguyệt hai bên của vé */
+  .ticket-notch {
+    position: relative;
+  }
+  .ticket-notch::before,
+  .ticket-notch::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    width: 22px;
+    height: 22px;
+    margin-top: -11px;
+    border-radius: 9999px;
+    background: var(--color-ink);
+    border: 1px solid var(--color-smoke);
+  }
+  .ticket-notch::before { left: -12px; }
+  .ticket-notch::after { right: -12px; }
+
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }
 
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  background-color: #020617;
-}
-
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
 }

@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useSearchParams } from "react-router";
 import { styles } from "@/components/styles";
-import { ErrorBox, Spinner } from "@/components/ui";
+import { ErrorBox } from "@/components/ui";
 import { formatDateTime, formatPercent, formatVnd } from "@/lib/format";
 import { ProgressBar, RevenueChart } from "./charts";
 import { useOccupancy, useRevenue, useTopMovies } from "./queries";
@@ -33,8 +33,8 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Báo cáo</h1>
-        <div role="tablist" className="flex gap-1 rounded-lg bg-slate-900 p-1">
+        <h1 className={styles.heading}>Báo cáo</h1>
+        <div role="tablist" className={styles.tabList}>
           {RANGES.map((r) => (
             <button
               key={r}
@@ -42,9 +42,7 @@ export function DashboardPage() {
               role="tab"
               aria-selected={days === r}
               onClick={() => setParams(r === 7 ? {} : { days: String(r) })}
-              className={`rounded-md px-3 py-1.5 text-sm transition ${
-                days === r ? "bg-red-600 text-white" : "text-slate-300 hover:text-white"
-              }`}
+              className={`${styles.tab} ${days === r ? styles.tabActive : styles.tabIdle}`}
             >
               {r} ngày
             </button>
@@ -52,11 +50,13 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <Kpi label="Doanh thu" value={totalRevenue === undefined ? "—" : formatVnd(totalRevenue)} />
-        <Kpi label="Số đơn" value={totalOrders === undefined ? "—" : String(totalOrders)} />
-        <Kpi label="Giá trị TB / đơn" value={totalOrders === undefined ? "—" : formatVnd(average)} />
+      <div className="stagger grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Kpi icon="💰" tone="bg-brand/15" label="Doanh thu" value={totalRevenue === undefined ? "—" : formatVnd(totalRevenue)} />
+        <Kpi icon="🎟" tone="bg-sky-500/15" label="Số đơn" value={totalOrders === undefined ? "—" : String(totalOrders)} />
+        <Kpi icon="🧾" tone="bg-amber-500/15" label="Giá trị TB / đơn" value={totalOrders === undefined ? "—" : formatVnd(average)} />
         <Kpi
+          icon="💺"
+          tone="bg-green-500/15"
           label="Lấp đầy TB"
           value={occupancy.data ? formatPercent(occupancy.data.overall_occupancy) : "—"}
         />
@@ -71,20 +71,27 @@ export function DashboardPage() {
           {(data) => {
             const max = Math.max(1, ...data.movies.map((m) => m.tickets));
             return data.movies.length === 0 ? (
-              <p className="text-sm text-slate-400">Chưa có vé bán trong khoảng này.</p>
+              <p className="text-sm text-muted">Chưa có vé bán trong khoảng này.</p>
             ) : (
-              <ol className="space-y-3">
+              <ol className="space-y-4">
                 {data.movies.map((m, i) => (
-                  <li key={m.movie_id} className="space-y-1">
+                  <li key={m.movie_id} className="flex items-center gap-3">
+                    <span
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-display text-sm font-bold ${
+                        i === 0 ? "bg-gold text-black shadow-[0_0_14px_rgba(245,196,81,0.5)]" : "bg-smoke text-muted"
+                      }`}
+                    >
+                      {i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1 space-y-1.5">
                     <div className="flex justify-between gap-3 text-sm">
-                      <span className="font-medium">
-                        {i + 1}. {m.title}
-                      </span>
-                      <span className="shrink-0 text-slate-400">
+                      <span className="truncate font-medium">{m.title}</span>
+                      <span className="shrink-0 font-mono text-xs text-muted">
                         {m.tickets} vé · {formatVnd(m.revenue)}
                       </span>
                     </div>
-                    <ProgressBar ratio={m.tickets / max} barClass="bg-red-600" />
+                    <ProgressBar ratio={m.tickets / max} barClass="bg-gradient-to-r from-rose-800 to-brand" />
+                    </div>
                   </li>
                 ))}
               </ol>
@@ -95,32 +102,32 @@ export function DashboardPage() {
         <Section title="Tỉ lệ lấp đầy từng suất" query={occupancy}>
           {(data) =>
             data.showtimes.length === 0 ? (
-              <p className="text-sm text-slate-400">Không có suất chiếu trong khoảng này.</p>
+              <p className="text-sm text-muted">Không có suất chiếu trong khoảng này.</p>
             ) : (
               <div className="max-h-96 overflow-auto">
                 <table className="w-full text-left text-sm">
-                  <thead className="sticky top-0 bg-slate-900 text-xs text-slate-400">
+                  <thead className="sticky top-0 z-10 bg-surface text-xs uppercase tracking-wider text-dim">
                     <tr>
                       <th className="py-2 pr-2 font-medium">Suất chiếu</th>
                       <th className="py-2 pr-2 text-right font-medium">Đã bán</th>
                       <th className="w-24 py-2 font-medium">Lấp đầy</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800">
+                  <tbody className="divide-y divide-smoke">
                     {data.showtimes.map((s) => (
                       <tr key={s.showtime_id}>
                         <td className="py-2 pr-2">
                           <div className="font-medium">{s.movie_title}</div>
-                          <div className="text-xs text-slate-500">
+                          <div className="text-xs text-dim">
                             {s.cinema_name} · {s.room_name} · {formatDateTime(s.start_time)}
                           </div>
                         </td>
-                        <td className="py-2 pr-2 text-right tabular-nums">
+                        <td className="py-2 pr-2 text-right font-mono tabular-nums">
                           {s.seats_sold}/{s.seats_total}
                         </td>
                         <td className="py-2">
                           <ProgressBar ratio={s.occupancy} barClass={occupancyTone(s.occupancy)} />
-                          <span className="text-xs text-slate-400">{formatPercent(s.occupancy)}</span>
+                          <span className="font-mono text-xs text-muted">{formatPercent(s.occupancy)}</span>
                         </td>
                       </tr>
                     ))}
@@ -132,7 +139,7 @@ export function DashboardPage() {
         </Section>
       </div>
 
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-dim">
         Doanh thu tính theo ngày thanh toán. Phim bán chạy và tỉ lệ lấp đầy tính theo ngày chiếu, nên
         hai nhóm số liệu này không cần khớp từng ngày.
       </p>
@@ -140,11 +147,16 @@ export function DashboardPage() {
   );
 }
 
-function Kpi({ label, value }: { label: string; value: string }) {
+function Kpi({ icon, tone, label, value }: { icon: string; tone: string; label: string; value: string }) {
   return (
-    <div className={styles.card}>
-      <p className="text-xs text-slate-400">{label}</p>
-      <p className="mt-1 text-xl font-bold tabular-nums">{value}</p>
+    <div className={`${styles.card} transition duration-300 hover:-translate-y-1 hover:border-brand/40`}>
+      <span className={`flex h-10 w-10 items-center justify-center rounded-full text-lg ${tone}`} aria-hidden>
+        {icon}
+      </span>
+      <p className="mt-4 text-xs font-medium uppercase tracking-wider text-muted">{label}</p>
+      <p key={value} className="mt-1 animate-fade-up font-display text-3xl font-bold tabular-nums">
+        {value}
+      </p>
     </div>
   );
 }
@@ -161,9 +173,15 @@ function Section<T>({
 }) {
   return (
     <section className={`${styles.card} space-y-4`}>
-      <h2 className="font-semibold">{title}</h2>
+      <h2 className="flex items-center gap-2.5 font-display text-xl font-semibold uppercase tracking-wide">
+        <span className="h-5 w-1 rounded-full bg-brand" />
+        {title}
+      </h2>
       {query.isPending ? (
-        <Spinner />
+        <div className="space-y-3" role="status" aria-label="Đang tải">
+          <div className="skeleton h-4 w-2/3 rounded" />
+          <div className="skeleton h-32 rounded-xl" />
+        </div>
       ) : query.isError ? (
         <ErrorBox error={query.error} onRetry={() => query.refetch()} />
       ) : (

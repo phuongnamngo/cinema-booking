@@ -18,7 +18,7 @@ const MAX_SEATS = 8; // server cũng kiểm tra (MAX_SEATS_PER_BOOKING), đây c
 const NO_SEATS: ShowtimeSeat[] = []; // hằng số: tránh tạo mảng mới mỗi lần render
 
 const CONNECTION = {
-  connecting: { label: "Đang kết nối…", dot: "bg-slate-500" },
+  connecting: { label: "Đang kết nối…", dot: "bg-zinc-500" },
   open: { label: "Trực tiếp", dot: "bg-green-500" },
   reconnecting: { label: "Mất kết nối, đang nối lại…", dot: "bg-amber-500" },
   unavailable: { label: "Suất chiếu không còn mở", dot: "bg-red-500" },
@@ -105,37 +105,51 @@ function SeatPicker({ showtime }: { showtime: Showtime }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <Link to={`/movies/${showtime.movie}`} className="text-2xl font-bold hover:underline">
-            {showtime.movie_title}
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/5 pb-6">
+        <div className="space-y-1">
+          <Link to={`/movies/${showtime.movie}`} className="text-xs text-muted transition hover:text-fg">
+            ← Đổi suất chiếu
           </Link>
-          <p className="mt-1 text-sm text-slate-400">
-            {showtime.cinema_name} · {showtime.room_name} · {formatDateTime(showtime.start_time)}
+          <h1>
+            <Link
+              to={`/movies/${showtime.movie}`}
+              className="font-display text-3xl font-bold uppercase tracking-wide transition hover:text-brand-hover sm:text-4xl"
+            >
+              {showtime.movie_title}
+            </Link>
+          </h1>
+          <p className="text-sm text-muted">
+            <span className="text-brand-hover">{showtime.cinema_name}</span> · {showtime.room_name} ·{" "}
+            <span className="font-mono">{formatDateTime(showtime.start_time)}</span>
           </p>
         </div>
         <span
-          className="flex items-center gap-2 rounded-full bg-slate-900 px-3 py-1 text-xs text-slate-300"
+          className="flex items-center gap-2 rounded-full border border-smoke bg-surface/80 px-3.5 py-1.5 text-xs text-zinc-300 backdrop-blur"
           role="status"
         >
-          <span className={`h-2 w-2 rounded-full ${conn.dot}`} />
+          <span className="relative flex h-2.5 w-2.5">
+            {socket.connection === "open" && (
+              <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-70 ${conn.dot}`} />
+            )}
+            <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${conn.dot}`} />
+          </span>
           {conn.label}
         </span>
       </div>
 
       {pending && (
-        <div className="rounded-lg border border-sky-800 bg-sky-950 p-4 text-sm">
-          Bạn đang giữ ghế cho suất chiếu này.{" "}
-          <Link to={`/bookings/${pending.code}`} className="font-semibold text-sky-300 underline">
-            Đến trang thanh toán
+        <div className="flex animate-fade-up flex-wrap items-center justify-between gap-3 rounded-2xl border border-hold/30 bg-sky-950/40 px-5 py-4 text-sm backdrop-blur">
+          <span>ℹ️ Bạn đang giữ ghế cho suất chiếu này.</span>
+          <Link to={`/bookings/${pending.code}`} className="font-semibold text-hold hover:underline">
+            Đến trang thanh toán →
           </Link>
         </div>
       )}
 
-      <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
-        <div className="space-y-6">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0 space-y-6">
           {seatsQuery.isPending ? (
-            <Spinner />
+            <div className="skeleton h-[420px] rounded-2xl" />
           ) : seatsQuery.isError ? (
             <ErrorBox error={seatsQuery.error} onRetry={() => seatsQuery.refetch()} />
           ) : (
@@ -152,19 +166,42 @@ function SeatPicker({ showtime }: { showtime: Showtime }) {
           )}
         </div>
 
-        <aside className={`${styles.card} h-fit space-y-4 lg:sticky lg:top-6`}>
-          <h2 className="font-semibold">Ghế đã chọn</h2>
+        <aside className={`${styles.card} h-fit space-y-5 lg:sticky lg:top-24`}>
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-xl font-semibold uppercase tracking-wide">Ghế đã chọn</h2>
+            {validSelected.length > 0 && (
+              <span className="rounded-full bg-brand/15 px-2.5 py-0.5 text-xs font-semibold text-brand-hover">
+                {validSelected.length} ghế
+              </span>
+            )}
+          </div>
           {validSelected.length === 0 ? (
-            <p className="text-sm text-slate-400">Chọn tối đa {MAX_SEATS} ghế.</p>
+            <p className="rounded-xl border border-dashed border-smoke px-4 py-6 text-center text-sm text-muted">
+              Chọn tối đa {MAX_SEATS} ghế.
+            </p>
           ) : (
-            <ul className="space-y-1 text-sm">
+            <ul className="space-y-2 text-sm">
               {validSelected.map((id) => {
                 const seat = seatsById.get(id);
                 return (
                   seat && (
-                    <li key={id} className="flex justify-between">
-                      <span>{seat.label}</span>
-                      <span className="text-slate-400">{formatVnd(seat.price)}</span>
+                    <li
+                      key={id}
+                      className="flex animate-fade-up items-center justify-between rounded-xl border border-smoke bg-field px-3.5 py-2.5"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className="font-mono font-semibold">{seat.label}</span>
+                        {seat.seat_type !== "standard" && (
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
+                              seat.seat_type === "vip" ? "bg-gold/15 text-gold" : "bg-sweet/15 text-sweet"
+                            }`}
+                          >
+                            {seat.seat_type === "vip" ? "VIP" : "Đôi"}
+                          </span>
+                        )}
+                      </span>
+                      <span className="font-mono text-muted">{formatVnd(seat.price)}</span>
                     </li>
                   )
                 );
@@ -172,13 +209,15 @@ function SeatPicker({ showtime }: { showtime: Showtime }) {
             </ul>
           )}
           {lostLabels.length > 0 && (
-            <p role="alert" className="text-sm text-amber-400">
-              Ghế {lostLabels.join(", ")} vừa có người khác chọn.
+            <p role="alert" className="animate-shake rounded-xl border border-amber-500/30 bg-amber-950/30 px-3.5 py-2.5 text-sm text-amber-300">
+              ⚠️ Ghế {lostLabels.join(", ")} vừa có người khác chọn.
             </p>
           )}
-          <div className="flex justify-between border-t border-slate-800 pt-3 font-semibold">
-            <span>Tạm tính</span>
-            <span>{formatVnd(total)}</span>
+          <div className="flex items-end justify-between border-t border-smoke pt-4">
+            <span className="text-sm text-muted">Tạm tính</span>
+            <span key={total} className="animate-fade-up font-display text-3xl font-bold tabular-nums">
+              {formatVnd(total)}
+            </span>
           </div>
           {hold.isError && (
             <p role="alert" className={styles.error}>
@@ -191,15 +230,15 @@ function SeatPicker({ showtime }: { showtime: Showtime }) {
             disabled={
               closed || hold.isPending || pending !== undefined || validSelected.length === 0
             }
-            className={`${styles.button} w-full`}
+            className={`${styles.button} w-full py-3.5 text-base uppercase tracking-wider`}
           >
             {hold.isPending
               ? "Đang giữ ghế…"
               : authStatus === "authenticated"
-                ? "Tiếp tục"
+                ? "Tiếp tục →"
                 : "Đăng nhập để tiếp tục"}
           </button>
-          <p className="text-xs text-slate-500">
+          <p className="text-center text-xs leading-relaxed text-dim">
             Ghế chỉ được giữ (10 phút) khi bạn bấm "Tiếp tục". Giá tính lại ở máy chủ.
           </p>
         </aside>
