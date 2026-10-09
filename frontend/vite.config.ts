@@ -11,11 +11,13 @@ export default defineConfig({
   server: {
     host: true, // nghe 0.0.0.0 để truy cập được từ ngoài container
     port: 5173,
-    // KHÔNG bật changeOrigin: giữ Host = localhost:5173 (xem lý thuyết mục 2)
+    // Giữ Host = localhost:5173. Dạng chuỗi của Vite bật changeOrigin,
+    // khiến Django dựng payment URL thành http://backend:8000/... và link
+    // quay về vé rơi vào Django thay vì SPA.
     proxy: {
-      "/api": "http://backend:8000",
-      "/mock-gateway": "http://backend:8000",
-      "/ws": { target: "ws://backend:8000", ws: true },
+      "/api": { target: "http://backend:8000", changeOrigin: false },
+      "/mock-gateway": { target: "http://backend:8000", changeOrigin: false },
+      "/ws": { target: "ws://backend:8000", ws: true, changeOrigin: false },
     },
   },
   test: { environment: "jsdom" },
